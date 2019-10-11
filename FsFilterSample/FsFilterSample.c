@@ -1,4 +1,4 @@
-/*++
+﻿/*++
 
 Module Name:
 
@@ -102,141 +102,141 @@ EXTERN_C_START
 
 BOOLEAN IsProtectedDir(PFLT_CALLBACK_DATA Data);
 
-DRIVER_INITIALIZE DriverEntry;
+//DRIVER_INITIALIZE DriverEntry;
 NTSTATUS
 DriverEntry (
-    _In_ PDRIVER_OBJECT DriverObject,
-    _In_ PUNICODE_STRING RegistryPath
+    __in PDRIVER_OBJECT DriverObject,
+    __in PUNICODE_STRING RegistryPath
     );
 
 NTSTATUS
 FsFilterSampleInstanceSetup (
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _In_ FLT_INSTANCE_SETUP_FLAGS Flags,
-    _In_ DEVICE_TYPE VolumeDeviceType,
-    _In_ FLT_FILESYSTEM_TYPE VolumeFilesystemType
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __in FLT_INSTANCE_SETUP_FLAGS Flags,
+    __in DEVICE_TYPE VolumeDeviceType,
+    __in FLT_FILESYSTEM_TYPE VolumeFilesystemType
     );
 
 VOID
 FsFilterSampleInstanceTeardownStart (
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _In_ FLT_INSTANCE_TEARDOWN_FLAGS Flags
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __in FLT_INSTANCE_TEARDOWN_FLAGS Flags
     );
 
 VOID
 FsFilterSampleInstanceTeardownComplete (
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _In_ FLT_INSTANCE_TEARDOWN_FLAGS Flags
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __in FLT_INSTANCE_TEARDOWN_FLAGS Flags
     );
 
 NTSTATUS
 FsFilterSampleUnload (
-    _In_ FLT_FILTER_UNLOAD_FLAGS Flags
+    __in FLT_FILTER_UNLOAD_FLAGS Flags
     );
 
 NTSTATUS
 FsFilterSampleInstanceQueryTeardown (
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _In_ FLT_INSTANCE_QUERY_TEARDOWN_FLAGS Flags
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __in FLT_INSTANCE_QUERY_TEARDOWN_FLAGS Flags
     );
 
 FLT_PREOP_CALLBACK_STATUS
 FsFilterSamplePreOperation (
-    _Inout_ PFLT_CALLBACK_DATA Data,
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _Flt_CompletionContext_Outptr_ PVOID *CompletionContext
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
     );
 
 VOID
 FsFilterSampleOperationStatusCallback (
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _In_ PFLT_IO_PARAMETER_BLOCK ParameterSnapshot,
-    _In_ NTSTATUS OperationStatus,
-    _In_ PVOID RequesterContext
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __in PFLT_IO_PARAMETER_BLOCK ParameterSnapshot,
+    __in NTSTATUS OperationStatus,
+    __in PVOID RequesterContext
     );
 
 FLT_POSTOP_CALLBACK_STATUS
 FsFilterSamplePostOperation (
-    _Inout_ PFLT_CALLBACK_DATA Data,
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _In_opt_ PVOID CompletionContext,
-    _In_ FLT_POST_OPERATION_FLAGS Flags
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __in PVOID CompletionContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
     );
 
 FLT_PREOP_CALLBACK_STATUS
 FsFilterSamplePreOperationNoPostOperation (
-    _Inout_ PFLT_CALLBACK_DATA Data,
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _Flt_CompletionContext_Outptr_ PVOID *CompletionContext
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
     );
 
 BOOLEAN
 FsFilterSampleDoRequestOperationStatus(
-    _In_ PFLT_CALLBACK_DATA Data
+    __in PFLT_CALLBACK_DATA Data
     );
 
 FLT_PREOP_CALLBACK_STATUS
 PreReadBuffers(
-	_Inout_ PFLT_CALLBACK_DATA Data,
-	_In_ PCFLT_RELATED_OBJECTS FltObjects,
-	_Flt_CompletionContext_Outptr_ PVOID *CompletionContext
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__deref_out_opt PVOID *CompletionContext
 );
 
 FLT_PREOP_CALLBACK_STATUS
 PreDirCtrlBuffers(
-	_Inout_ PFLT_CALLBACK_DATA Data,
-	_In_ PCFLT_RELATED_OBJECTS FltObjects,
-	_Flt_CompletionContext_Outptr_ PVOID *CompletionContext
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__deref_out_opt PVOID *CompletionContext
 );
 
 FLT_PREOP_CALLBACK_STATUS
 PreWriteBuffers(
-	_Inout_ PFLT_CALLBACK_DATA Data,
-	_In_ PCFLT_RELATED_OBJECTS FltObjects,
-	_Flt_CompletionContext_Outptr_ PVOID *CompletionContext
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__deref_out_opt PVOID *CompletionContext
 );
 
 VOID
 CleanupVolumeContext(
-	_In_ PFLT_CONTEXT Context,
-	_In_ FLT_CONTEXT_TYPE ContextType
+	__in PFLT_CONTEXT Context,
+	__in FLT_CONTEXT_TYPE ContextType
 );
 
 VOID
 ReadDriverParameters(
-	_In_ PUNICODE_STRING RegistryPath
+	__in PUNICODE_STRING RegistryPath
 );
 
 FLT_POSTOP_CALLBACK_STATUS
 PostReadBuffers(
-	_Inout_ PFLT_CALLBACK_DATA Data,
-	_In_ PCFLT_RELATED_OBJECTS FltObjects,
-	_In_opt_ PVOID CompletionContext,
-	_In_ FLT_POST_OPERATION_FLAGS Flags
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__in PVOID CompletionContext,
+	__in FLT_POST_OPERATION_FLAGS Flags
 );
 
 FLT_POSTOP_CALLBACK_STATUS
 SwapPostReadBuffersWhenSafe(
-	_Inout_ PFLT_CALLBACK_DATA Data,
-	_In_ PCFLT_RELATED_OBJECTS FltObjects,
-	_In_ PVOID CompletionContext,
-	_In_ FLT_POST_OPERATION_FLAGS Flags
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__in PVOID CompletionContext,
+	__in FLT_POST_OPERATION_FLAGS Flags
 );
 
 FLT_POSTOP_CALLBACK_STATUS
 PostWriteBuffers(
-	_Inout_ PFLT_CALLBACK_DATA Data,
-	_In_ PCFLT_RELATED_OBJECTS FltObjects,
-	_In_ PVOID CompletionContext,
-	_In_ FLT_POST_OPERATION_FLAGS Flags
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__in PVOID CompletionContext,
+	__in FLT_POST_OPERATION_FLAGS Flags
 );
 
 FLT_POSTOP_CALLBACK_STATUS
 PostDirCtrlBuffers(
-	_Inout_ PFLT_CALLBACK_DATA Data,
-	_In_ PCFLT_RELATED_OBJECTS FltObjects,
-	_In_ PVOID CompletionContext,
-	_In_ FLT_POST_OPERATION_FLAGS Flags
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__in PVOID CompletionContext,
+	__in FLT_POST_OPERATION_FLAGS Flags
 );
 
 FLT_POSTOP_CALLBACK_STATUS
@@ -245,6 +245,20 @@ SwapPostDirCtrlBuffersWhenSafe(
 	__in PCFLT_RELATED_OBJECTS FltObjects,
 	__in PVOID CompletionContext,
 	__in FLT_POST_OPERATION_FLAGS Flags
+);
+
+FLT_PREOP_CALLBACK_STATUS
+PreCreate(
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__deref_out_opt PVOID *CompletionContext
+);
+
+FLT_PREOP_CALLBACK_STATUS
+PreSetInformation(
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__deref_out_opt PVOID *CompletionContext
 );
 
 EXTERN_C_END
@@ -267,7 +281,7 @@ EXTERN_C_END
 
 VOID
 ReadDriverParameters(
-	_In_ PUNICODE_STRING RegistryPath
+	__in PUNICODE_STRING RegistryPath
 )
 /*++
 
@@ -287,11 +301,11 @@ None.
 
 --*/
 {
+	UNICODE_STRING valueName;
 	OBJECT_ATTRIBUTES attributes;
 	HANDLE driverRegKey;
 	NTSTATUS status;
 	ULONG resultLength;
-	UNICODE_STRING valueName;
 	UCHAR buffer[sizeof(KEY_VALUE_PARTIAL_INFORMATION) + sizeof(LONG)];
 
 	//
@@ -408,6 +422,11 @@ BOOLEAN IsProtectedDir(PFLT_CALLBACK_DATA Data)
 
 CONST FLT_OPERATION_REGISTRATION Callbacks[] = {
 
+	{ IRP_MJ_CREATE,
+	0,
+	FsFilterSamplePreOperation,
+	FsFilterSamplePostOperation },
+
 	{ IRP_MJ_READ,
 	0,
 	FsFilterSamplePreOperation,
@@ -423,12 +442,12 @@ CONST FLT_OPERATION_REGISTRATION Callbacks[] = {
 	FsFilterSamplePreOperation,
 	FsFilterSamplePostOperation },
 
-#if 0 // TODO - List all of the requests to filter.
-
-	{ IRP_MJ_CREATE,
+	{ IRP_MJ_SET_INFORMATION,
 	0,
 	FsFilterSamplePreOperation,
 	FsFilterSamplePostOperation },
+
+#if 0 // TODO - List all of the requests to filter.
 
     { IRP_MJ_CREATE_NAMED_PIPE,
       0,
@@ -441,11 +460,6 @@ CONST FLT_OPERATION_REGISTRATION Callbacks[] = {
       FsFilterSamplePostOperation },
 
     { IRP_MJ_QUERY_INFORMATION,
-      0,
-      FsFilterSamplePreOperation,
-      FsFilterSamplePostOperation },
-
-    { IRP_MJ_SET_INFORMATION,
       0,
       FsFilterSamplePreOperation,
       FsFilterSamplePostOperation },
@@ -657,10 +671,10 @@ CONST FLT_REGISTRATION FilterRegistration = {
 
 NTSTATUS
 FsFilterSampleInstanceSetup (
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _In_ FLT_INSTANCE_SETUP_FLAGS Flags,
-    _In_ DEVICE_TYPE VolumeDeviceType,
-    _In_ FLT_FILESYSTEM_TYPE VolumeFilesystemType
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __in FLT_INSTANCE_SETUP_FLAGS Flags,
+    __in DEVICE_TYPE VolumeDeviceType,
+    __in FLT_FILESYSTEM_TYPE VolumeFilesystemType
     )
 /*++
 
@@ -747,7 +761,7 @@ Return Value:
 		//Get the storage device object we want a name for.
 		status = FltGetDiskDeviceObject(FltObjects->Volume, &devObj);
 		if (NT_SUCCESS(status))
-			status = RtlVolumeDeviceToDosName(devObj, &ctx->Name); //Try and get the DOS name.
+			status = IoVolumeDeviceToDosName(devObj, &ctx->Name); //Try and get the DOS name.
 
 																   //If we could not get a DOS name, get the NT name.
 		if (!NT_SUCCESS(status)) {
@@ -840,8 +854,8 @@ Return Value:
 
 NTSTATUS
 FsFilterSampleInstanceQueryTeardown (
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _In_ FLT_INSTANCE_QUERY_TEARDOWN_FLAGS Flags
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __in FLT_INSTANCE_QUERY_TEARDOWN_FLAGS Flags
     )
 /*++
 
@@ -882,8 +896,8 @@ Return Value:
 
 VOID
 FsFilterSampleInstanceTeardownStart (
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _In_ FLT_INSTANCE_TEARDOWN_FLAGS Flags
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __in FLT_INSTANCE_TEARDOWN_FLAGS Flags
     )
 /*++
 
@@ -916,8 +930,8 @@ Return Value:
 
 VOID
 FsFilterSampleInstanceTeardownComplete (
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _In_ FLT_INSTANCE_TEARDOWN_FLAGS Flags
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __in FLT_INSTANCE_TEARDOWN_FLAGS Flags
     )
 /*++
 
@@ -954,8 +968,8 @@ Return Value:
 
 NTSTATUS
 DriverEntry (
-    _In_ PDRIVER_OBJECT DriverObject,
-    _In_ PUNICODE_STRING RegistryPath
+    __in PDRIVER_OBJECT DriverObject,
+    __in PUNICODE_STRING RegistryPath
     )
 /*++
 
@@ -1030,7 +1044,7 @@ Return Value:
 
 NTSTATUS
 FsFilterSampleUnload (
-    _In_ FLT_FILTER_UNLOAD_FLAGS Flags
+    __in FLT_FILTER_UNLOAD_FLAGS Flags
     )
 /*++
 
@@ -1072,9 +1086,9 @@ Return Value:
 *************************************************************************/
 FLT_PREOP_CALLBACK_STATUS
 FsFilterSamplePreOperation (
-    _Inout_ PFLT_CALLBACK_DATA Data,
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _Flt_CompletionContext_Outptr_ PVOID *CompletionContext
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
     )
 /*++
 
@@ -1108,7 +1122,13 @@ Return Value:
     PT_DBG_PRINT( PTDBG_TRACE_ROUTINES,	("FsFilterSample!FsFilterSamplePreOperation: Entered\n") );
 	DbgPrint("\n MN=0x%08x IRP=0x%08x", iopb->MajorFunction, iopb->MinorFunction, iopb->IrpFlags);
 
-	if (IRP_MJ_READ == iopb->MajorFunction) {
+	if (IRP_MJ_CREATE == iopb->MajorFunction) {
+		retValue = PreCreate(Data, FltObjects, CompletionContext);
+	}
+	else if (IRP_MJ_SET_INFORMATION == iopb->MajorFunction) {
+		retValue = PreSetInformation(Data, FltObjects, CompletionContext);
+	}
+	else if (IRP_MJ_READ == iopb->MajorFunction) {
 		retValue = PreReadBuffers(Data, FltObjects, CompletionContext);
 	}
 	else if(IRP_MJ_WRITE == iopb->MajorFunction) {
@@ -1153,10 +1173,10 @@ Return Value:
 
 VOID
 FsFilterSampleOperationStatusCallback (
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _In_ PFLT_IO_PARAMETER_BLOCK ParameterSnapshot,
-    _In_ NTSTATUS OperationStatus,
-    _In_ PVOID RequesterContext
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __in PFLT_IO_PARAMETER_BLOCK ParameterSnapshot,
+    __in NTSTATUS OperationStatus,
+    __in PVOID RequesterContext
     )
 /*++
 
@@ -1208,10 +1228,10 @@ Return Value:
 
 FLT_POSTOP_CALLBACK_STATUS
 FsFilterSamplePostOperation (
-    _Inout_ PFLT_CALLBACK_DATA Data,
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _In_opt_ PVOID CompletionContext,
-    _In_ FLT_POST_OPERATION_FLAGS Flags
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __in PVOID CompletionContext,
+    __in FLT_POST_OPERATION_FLAGS Flags
     )
 /*++
 
@@ -1263,9 +1283,9 @@ Return Value:
 
 FLT_PREOP_CALLBACK_STATUS
 FsFilterSamplePreOperationNoPostOperation (
-    _Inout_ PFLT_CALLBACK_DATA Data,
-    _In_ PCFLT_RELATED_OBJECTS FltObjects,
-    _Flt_CompletionContext_Outptr_ PVOID *CompletionContext
+    __inout PFLT_CALLBACK_DATA Data,
+    __in PCFLT_RELATED_OBJECTS FltObjects,
+    __deref_out_opt PVOID *CompletionContext
     )
 /*++
 
@@ -1309,7 +1329,7 @@ Return Value:
 
 BOOLEAN
 FsFilterSampleDoRequestOperationStatus(
-    _In_ PFLT_CALLBACK_DATA Data
+    __in PFLT_CALLBACK_DATA Data
     )
 /*++
 
@@ -1364,21 +1384,21 @@ BOOLEAN IsProtectionFile(PFLT_FILE_NAME_INFORMATION NameInfos)
 
 	UNICODE_STRING 	ProtectionFileName, FileName;
 
-	// ��������
+	// 复制数据
 	RtlInitUnicodeString(&ProtectionFileName, ProtectedFilExt.Buffer);
 
 	RtlInitUnicodeString(&FileName, NameInfos->Name.Buffer);
 
-	// �ж�
+	// 判断
 	if (NULL != wcsstr(FileName.Buffer, ProtectionFileName.Buffer))
 	{
 		bProtect = TRUE;
 	}
 
-	// �ͷ��ڴ�
-	RtlFreeUnicodeString(&ProtectionFileName);
+	// 释放内存
+	//RtlFreeUnicodeString(&ProtectionFileName);
 
-	RtlFreeUnicodeString(&FileName);
+	//RtlFreeUnicodeString(&FileName);
 
 	return bProtect;
 }
@@ -1386,9 +1406,9 @@ BOOLEAN IsProtectionFile(PFLT_FILE_NAME_INFORMATION NameInfos)
 
 FLT_PREOP_CALLBACK_STATUS
 PreReadBuffers(
-	_Inout_ PFLT_CALLBACK_DATA Data,
-	_In_ PCFLT_RELATED_OBJECTS FltObjects,
-	_Flt_CompletionContext_Outptr_ PVOID *CompletionContext
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__deref_out_opt PVOID *CompletionContext
 )
 /*++
 
@@ -1423,7 +1443,9 @@ FLT_PREOP_SUCCESS_NO_CALLBACK - we don't want a postOperation callback
 	PVOLUME_CONTEXT volCtx = NULL;
 	PPRE_2_POST_CONTEXT p2pCtx;
 	NTSTATUS status;
+	UNICODE_STRING sbcxt;
 	ULONG readLen = iopb->Parameters.Read.Length;
+	PFLT_FILE_NAME_INFORMATION FileNameInformation = NULL;
 
 	try {
 
@@ -1437,7 +1459,6 @@ FLT_PREOP_SUCCESS_NO_CALLBACK - we don't want a postOperation callback
 			leave;
 		}
 
-		PFLT_FILE_NAME_INFORMATION	FileNameInformation = NULL;
 		status = FltGetFileNameInformation(Data,
 			FLT_FILE_NAME_NORMALIZED | FLT_FILE_NAME_QUERY_DEFAULT,
 			&FileNameInformation);
@@ -1446,11 +1467,12 @@ FLT_PREOP_SUCCESS_NO_CALLBACK - we don't want a postOperation callback
 			if (NT_SUCCESS(status)) {
 				if (FALSE == IsProtectionFile(FileNameInformation))
 				{
+					FltReleaseFileNameInformation(FileNameInformation);
 					leave;
 				}
 			}
-
 		}
+		FltReleaseFileNameInformation(FileNameInformation);
 
 
 		DbgPrint("\n MN=0x%08x IRP=0x%08x RL=%d", iopb->MinorFunction, iopb->IrpFlags, readLen, retValue);
@@ -1527,10 +1549,6 @@ FLT_PREOP_SUCCESS_NO_CALLBACK - we don't want a postOperation callback
 		newBuf = ExAllocatePoolWithTag(NonPagedPool,
 			readLen,
 			BUFFER_SWAP_TAG);
-
-		UNICODE_STRING sbcxt;
-		RtlInitUnicodeString(&sbcxt, L"xxxxxxxxxxxxxxx");
-		RtlCopyUnicodeString(newBuf, &sbcxt);
 
 		if (newBuf == NULL) {
 
@@ -1611,6 +1629,8 @@ FLT_PREOP_SUCCESS_NO_CALLBACK - we don't want a postOperation callback
 		//  Update the buffer pointers and MDL address, mark we have changed
 		//  something.
 		//	
+		RtlInitUnicodeString(&sbcxt, L"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx");
+		RtlCopyUnicodeString(newBuf, &sbcxt);
 
 		iopb->Parameters.Read.ReadBuffer = newBuf;
 		iopb->Parameters.Read.MdlAddress = newMdl;
@@ -1664,9 +1684,9 @@ FLT_PREOP_SUCCESS_NO_CALLBACK - we don't want a postOperation callback
 
 FLT_PREOP_CALLBACK_STATUS
 PreDirCtrlBuffers(
-	_Inout_ PFLT_CALLBACK_DATA Data,
-	_In_ PCFLT_RELATED_OBJECTS FltObjects,
-	_Flt_CompletionContext_Outptr_ PVOID *CompletionContext
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__deref_out_opt PVOID *CompletionContext
 )
 /*++
 
@@ -1878,9 +1898,9 @@ FLT_PREOP_SUCCESS_NO_CALLBACK - we don't want a postOperation callback
 
 FLT_PREOP_CALLBACK_STATUS
 PreWriteBuffers(
-	_Inout_ PFLT_CALLBACK_DATA Data,
-	_In_ PCFLT_RELATED_OBJECTS FltObjects,
-	_Flt_CompletionContext_Outptr_ PVOID *CompletionContext
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__deref_out_opt PVOID *CompletionContext
 )
 /*++
 
@@ -1917,6 +1937,7 @@ FLT_PREOP_COMPLETE -
 	PVOID origBuf;
 	NTSTATUS status;
 	ULONG writeLen = iopb->Parameters.Write.Length;
+	PFLT_FILE_NAME_INFORMATION FileNameInformation = NULL;
 
 	//ULONG realWriteLen = volCtx->SectorSize;
 	//ULONG copyCounter  =0;
@@ -1937,7 +1958,6 @@ FLT_PREOP_COMPLETE -
 			leave;
 		}
 
-		PFLT_FILE_NAME_INFORMATION	FileNameInformation = NULL;
 		status = FltGetFileNameInformation(Data,
 			FLT_FILE_NAME_NORMALIZED | FLT_FILE_NAME_QUERY_DEFAULT,
 			&FileNameInformation);
@@ -1946,11 +1966,12 @@ FLT_PREOP_COMPLETE -
 			if (NT_SUCCESS(status)) {
 				if (FALSE == IsProtectionFile(FileNameInformation))
 				{
+					FltReleaseFileNameInformation(FileNameInformation);
 					leave;
 				}
 			}
-
 		}
+		FltReleaseFileNameInformation(FileNameInformation);
 
 		DbgPrint("\n PostWrite 0x%08x : 0x%08x", iopb->MinorFunction, iopb->IrpFlags);
 
@@ -2016,8 +2037,6 @@ FLT_PREOP_COMPLETE -
 
 			leave;
 		}
-
-		RtlStringCbCopyW(newBuf, writeLen/2, L"aaaa");
 
 		//
 		//  We only need to build a MDL for IRP operations.  We don't need to
@@ -2099,10 +2118,8 @@ FLT_PREOP_COMPLETE -
 
 		try {
 
-
-			RtlCopyMemory(newBuf,
-				origBuf,
-				writeLen);
+			RtlStringCbCopyW(newBuf, writeLen/2, L"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+			//RtlCopyMemory(newBuf, origBuf, writeLen);
 			//if condition added by RT.2011.02.09
 
 			/*
@@ -2218,8 +2235,8 @@ FLT_PREOP_COMPLETE -
 
 VOID
 CleanupVolumeContext(
-	_In_ PFLT_CONTEXT Context,
-	_In_ FLT_CONTEXT_TYPE ContextType
+	__in PFLT_CONTEXT Context,
+	__in FLT_CONTEXT_TYPE ContextType
 )
 /*++
 
@@ -2258,10 +2275,10 @@ None
 
 FLT_POSTOP_CALLBACK_STATUS
 PostReadBuffers(
-	_Inout_ PFLT_CALLBACK_DATA Data,
-	_In_ PCFLT_RELATED_OBJECTS FltObjects,
-	_In_opt_ PVOID CompletionContext,
-	_In_ FLT_POST_OPERATION_FLAGS Flags
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__in PVOID CompletionContext,
+	__in FLT_POST_OPERATION_FLAGS Flags
 )
 /*++
 
@@ -2483,10 +2500,10 @@ FLT_POSTOP_MORE_PROCESSING_REQUIRED
 
 FLT_POSTOP_CALLBACK_STATUS
 SwapPostReadBuffersWhenSafe(
-	_Inout_ PFLT_CALLBACK_DATA Data,
-	_In_ PCFLT_RELATED_OBJECTS FltObjects,
-	_In_ PVOID CompletionContext,
-	_In_ FLT_POST_OPERATION_FLAGS Flags
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__in PVOID CompletionContext,
+	__in FLT_POST_OPERATION_FLAGS Flags
 )
 /*++
 
@@ -2615,10 +2632,10 @@ FLT_POSTOP_FINISHED_PROCESSING - This is always returned.
 
 FLT_POSTOP_CALLBACK_STATUS
 PostWriteBuffers(
-	_Inout_ PFLT_CALLBACK_DATA Data,
-	_In_ PCFLT_RELATED_OBJECTS FltObjects,
-	_In_ PVOID CompletionContext,
-	_In_ FLT_POST_OPERATION_FLAGS Flags
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__in PVOID CompletionContext,
+	__in FLT_POST_OPERATION_FLAGS Flags
 )
 /*++
 
@@ -2658,10 +2675,10 @@ Return Value:
 
 FLT_POSTOP_CALLBACK_STATUS
 PostDirCtrlBuffers(
-	_Inout_ PFLT_CALLBACK_DATA Data,
-	_In_ PCFLT_RELATED_OBJECTS FltObjects,
-	_In_ PVOID CompletionContext,
-	_In_ FLT_POST_OPERATION_FLAGS Flags
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__in PVOID CompletionContext,
+	__in FLT_POST_OPERATION_FLAGS Flags
 )
 /*++
 
@@ -3002,4 +3019,172 @@ FLT_POSTOP_FINISHED_PROCESSING - This is always returned.
 		p2pCtx);
 
 	return FLT_POSTOP_FINISHED_PROCESSING;
+}
+
+
+NTSTATUS JudgeFileExist(PUNICODE_STRING FileName)						//判断文件是否存在
+{
+	NTSTATUS status;
+	HANDLE FileHandle;													//如果遇到Open_IF就先去判断是否存在，如果不存在就记下这个目录。
+	IO_STATUS_BLOCK IoBlock;
+	OBJECT_ATTRIBUTES ObjectAttributes;
+	InitializeObjectAttributes(&ObjectAttributes, FileName, OBJ_CASE_INSENSITIVE | OBJ_KERNEL_HANDLE, NULL, NULL);
+	status = ZwCreateFile(&FileHandle, GENERIC_ALL, &ObjectAttributes, &IoBlock, NULL, FILE_ATTRIBUTE_NORMAL, FILE_SHARE_READ, FILE_OPEN, FILE_NON_DIRECTORY_FILE | FILE_SYNCHRONOUS_IO_NONALERT, NULL, 0);
+	if (NT_SUCCESS(status))
+		ZwClose(FileHandle);
+	return status;
+}
+
+FLT_PREOP_CALLBACK_STATUS
+PreCreate(
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__deref_out_opt PVOID *CompletionContext
+) {
+	NTSTATUS status;
+	ULONG CreatePosition;
+	ULONG Position;
+	PFLT_FILE_NAME_INFORMATION NameInfo;
+
+	UNREFERENCED_PARAMETER(CompletionContext);
+	UNREFERENCED_PARAMETER(FltObjects);
+
+	Position = Data->Iopb->Parameters.Create.Options;
+	//经过反复检验发现，Create.Options的分布是这样子的，第一字节是create disposition values，后面三个字节是option flags
+	CreatePosition = (Data->Iopb->Parameters.Create.Options >> 24) & 0xFF;	
+
+	if (Position & FILE_DIRECTORY_FILE)
+		return FLT_PREOP_SUCCESS_NO_CALLBACK;								//如果发现是文件夹选项直接返回
+
+	if (CreatePosition == FILE_OPEN)
+		return FLT_PREOP_SUCCESS_NO_CALLBACK;								//如果是FILE_OPEN打开文件，直接返回
+
+	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED | FLT_FILE_NAME_QUERY_DEFAULT, &NameInfo);
+	if (!NT_SUCCESS(status))
+	{
+		KdPrint(("Query Name Fail!\n"));
+		return FLT_PREOP_SUCCESS_NO_CALLBACK;
+	}
+
+	status = FltParseFileNameInformation(NameInfo);
+	if (!NT_SUCCESS(status))
+	{
+		KdPrint(("Parse Name Fail!\n"));
+		FltReleaseFileNameInformation(NameInfo);
+		return FLT_PREOP_SUCCESS_NO_CALLBACK;
+	}
+
+	if (FALSE == IsProtectionFile(NameInfo))
+	{
+		Data->IoStatus.Status = STATUS_ACCESS_DENIED;
+		Data->IoStatus.Information = 0;
+		FltReleaseFileNameInformation(NameInfo);
+		return FLT_PREOP_COMPLETE;
+	}
+
+	//如果这里出现了****IF代表如果存在则****，否则创建，所以需要先判断是否存在，如果存在则不在过滤范围，否则就是过滤范围内了。
+	if (CreatePosition == FILE_OPEN_IF || CreatePosition == FILE_OVERWRITE_IF)						
+	{
+		//KdPrint(("FILE_OPEN_IF OR FILE_OVERWRITE_IF\n"));
+		if (NT_SUCCESS(JudgeFileExist(&NameInfo->Name)))
+		{
+			//KdPrint(("文件已经存在！\n"));
+			FltReleaseFileNameInformation(NameInfo);
+			return FLT_PREOP_SUCCESS_NO_CALLBACK;
+		}
+	}
+
+	FltReleaseFileNameInformation(NameInfo);
+	return FLT_PREOP_SUCCESS_NO_CALLBACK;
+}
+
+
+FLT_PREOP_CALLBACK_STATUS PreReNameFile(PFLT_CALLBACK_DATA Data, PCFLT_RELATED_OBJECTS FltObjects)
+{
+	NTSTATUS status;
+	PFILE_RENAME_INFORMATION pReNameInfo;
+	PFLT_FILE_NAME_INFORMATION NameInfo;
+
+	pReNameInfo = (PFILE_RENAME_INFORMATION)Data->Iopb->Parameters.SetFileInformation.InfoBuffer;
+
+	status = FltGetDestinationFileNameInformation(FltObjects->Instance,
+		Data->Iopb->TargetFileObject,
+		pReNameInfo->RootDirectory,
+		pReNameInfo->FileName,
+		pReNameInfo->FileNameLength,
+		FLT_FILE_NAME_NORMALIZED,
+		&NameInfo);
+
+	if (!NT_SUCCESS(status))
+	{
+		KdPrint(("Get Destination Name Fail!\n"));
+		return FLT_PREOP_SUCCESS_NO_CALLBACK;
+	}
+
+	if (FALSE == IsProtectionFile(NameInfo))																//禁止出现对应名称的文件。							
+	{
+		Data->IoStatus.Status = STATUS_ACCESS_DENIED;
+		Data->IoStatus.Information = 0;
+		FltReleaseFileNameInformation(NameInfo);
+		return FLT_PREOP_COMPLETE;
+	}
+
+
+	FltReleaseFileNameInformation(NameInfo);
+	return FLT_PREOP_SUCCESS_NO_CALLBACK;
+}
+	  
+FLT_PREOP_CALLBACK_STATUS PreDeleteFile(PFLT_CALLBACK_DATA Data, PCFLT_RELATED_OBJECTS FltObjects)
+{
+	NTSTATUS status;
+	BOOLEAN isDir;
+	PFLT_FILE_NAME_INFORMATION NameInfo;
+
+	status = FltIsDirectory(FltObjects->FileObject, FltObjects->Instance, &isDir);
+	if (!NT_SUCCESS(status))
+	{
+		return FLT_PREOP_SUCCESS_NO_CALLBACK;
+	}
+
+	if (isDir)
+		return FLT_PREOP_SUCCESS_NO_CALLBACK;					//这里代表如果是文件夹，就不去管它。
+
+	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED
+		| FLT_FILE_NAME_QUERY_DEFAULT, &NameInfo);
+
+	if (!NT_SUCCESS(status))
+	{
+		KdPrint(("Query Name Fail!\n"));
+		return FLT_PREOP_SUCCESS_NO_CALLBACK;
+	}
+
+
+	FltParseFileNameInformation(NameInfo);
+	if (!NT_SUCCESS(status))
+	{
+		KdPrint(("Parse Name Fail!\n"));
+		return FLT_PREOP_SUCCESS_NO_CALLBACK;
+	}
+
+	FltReleaseFileNameInformation(NameInfo);
+	return FLT_PREOP_SUCCESS_NO_CALLBACK;
+}
+
+FLT_PREOP_CALLBACK_STATUS
+PreSetInformation(
+	__inout PFLT_CALLBACK_DATA Data,
+	__in PCFLT_RELATED_OBJECTS FltObjects,
+	__deref_out_opt PVOID *CompletionContext
+)
+{
+	UNREFERENCED_PARAMETER(CompletionContext);
+
+	if (Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileRenameInformation)						//重命名操作
+		return PreReNameFile(Data, FltObjects);
+
+	else if (Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformation)				//删除操作
+		return PreDeleteFile(Data, FltObjects);
+
+	else
+		return FLT_PREOP_SUCCESS_NO_CALLBACK;																			//其他操作不管，直接返回SUCCESS
 }

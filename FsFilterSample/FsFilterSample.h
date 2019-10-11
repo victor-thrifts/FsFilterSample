@@ -1,4 +1,4 @@
-//
+﻿//
 //  Definitions to display log messages.  The registry DWORD entry:
 //  "hklm\system\CurrentControlSet\Services\Swapbuffers\DebugFlags" defines
 //  the default state of these logging flags
