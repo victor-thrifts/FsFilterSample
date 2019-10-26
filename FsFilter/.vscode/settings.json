@@ -1,9 +1,0 @@
-{
-    "files.associations": {
-        "swapbuffers.h": "c",
-        "mspykern.h": "c",
-        "fsfilter.h": "c",
-        "mspylog.h": "c",
-        "minispy.h": "c"
-    }
-}
