@@ -4,7 +4,8 @@
 
 #define VER_FILETYPE    VFT_DRV
 #define VER_FILESUBTYPE VFT2_DRV_SYSTEM
-#define VER_FILEDESCRIPTION_STR     "FsFilterSample Filter Driver"
-#define VER_INTERNALNAME_STR        "FsFilterSample.sys"
+#define VER_FILEDESCRIPTION_STR     "SwapBuffers Filter Driver"
+#define VER_INTERNALNAME_STR        "swapBuffers.sys"
 
 #include "common.ver"
+

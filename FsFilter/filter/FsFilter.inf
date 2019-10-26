@@ -1,5 +1,5 @@
-﻿;;;
-;;; FsFilterSample
+;;;
+;;; fsFilter
 ;;;
 
 [Version]
@@ -8,7 +8,7 @@ Class       = "ActivityMonitor"                         ;This is determined by t
 ClassGuid   = {b86dff51-a31e-4bac-b3cf-e8cfe75c9fc2}    ;This value is determined by the Load Order Group value
 Provider    = %ManufacturerName%
 DriverVer   = 
-CatalogFile = FsFilterSample.cat
+CatalogFile = FsFilter.cat
 
 [DestinationDirs]
 DefaultDestDir          = 12
@@ -56,6 +56,9 @@ AddReg           = MiniFilter.AddRegistry
 
 [MiniFilter.AddRegistry]
 HKR,,"DebugFlags",0x00010001 ,0x0
+HKR,,"MaxRecords",0x00010001 ,%MaxRecords%
+HKR,,"NameQueryMethod",0x00010001,0x00000400
+HKR,,"ProtectedDir",0x00000000,%DefaultProtectedDir%
 HKR,,"SupportedFeatures",0x00010001,0x3
 HKR,"Instances","DefaultInstance",0x00000000,%DefaultInstance%
 HKR,"Instances\"%Instance1.Name%,"Altitude",0x00000000,%Instance1.Altitude%
@@ -69,7 +72,7 @@ HKR,"Instances\"%Instance1.Name%,"Flags",0x00010001,%Instance1.Flags%
 %DriverName%.sys
 
 [SourceDisksFiles]
-FsFilterSample.sys = 1,,
+fsFilter.sys = 1,,
 
 [SourceDisksNames]
 1 = %DiskId1%,,,
@@ -81,13 +84,17 @@ FsFilterSample.sys = 1,,
 [Strings]
 ; TODO - Add your manufacturer
 ManufacturerName        = "Template"
-ServiceDescription      = "FsFilterSample Mini-Filter Driver"
-ServiceName             = "FsFilterSample"
-DriverName              = "FsFilterSample"
-DiskId1                 = "FsFilterSample Device Installation Disk"
+ServiceDescription      = "FsFilter Mini-Filter Driver"
+ServiceName             = "FsFilter"
+DriverName              = "FsFilter"
+DiskId1                 = "FsFilter Device Installation Disk"
+
+DefaultProtectedDir		= "\EncryptionMinifilterDir\"
+MaxRecords				= 500
+
 
 ;Instances specific information.
-DefaultInstance         = "FsFilterSample Instance"
-Instance1.Name          = "FsFilterSample Instance"
+DefaultInstance         = "FsFilter Instance"
+Instance1.Name          = "FsFilter Instance"
 Instance1.Altitude       = "141000"
 Instance1.Flags         = 0x0              ; Allow all attachments

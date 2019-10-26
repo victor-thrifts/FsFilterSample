@@ -1,0 +1,7 @@
+PreCreate									--										IRP_MJ_CREATE
+PreSetInformation							--										IRP_MJ_SET_INFORMATION
+																									rename,
+																									dispose
+PreReadBuffers								PostReadBuffers							IRP_MJ_READ
+PreWriteBuffers								PostWriteBuffers						IRP_MJ_WRITE
+PreDirCtrBuffers							PostDirCtrBuffers						IPR_MJ_DIRECTORY_CONTROL
