@@ -108,7 +108,7 @@ Return Value:
 
     pLogRecord = (PLOG_RECORD) alignedBuffer;
 
-    if( pLogRecord->Reserved == -1 ) return -1;   //failed execute the command.
+    if( pLogRecord->Reserved == -1 ) return (DWORD)-1;   //failed execute the command.
 
     //
     //  Logic to write record to screen and/or file
@@ -119,7 +119,7 @@ Return Value:
         printf( "UNEXPECTED LOG_RECORD size: used=%d bytesReturned=%d\n",
                 pLogRecord->Length,
                 *lpbytesReturned);
-        return -1;
+        return (DWORD)-1;
     }
 
     pRecordData = &pLogRecord->Data;
@@ -139,6 +139,8 @@ Return Value:
             pLogRecord = (PLOG_RECORD)Add2Ptr(pLogRecord,pLogRecord->Length);
         }
     }
+
+    pLogRecord->Name[(pLogRecord->Length - sizeof(LOG_RECORD))/2] = UNICODE_NULL;
 
     ScreenDump( pLogRecord->SequenceNumber,
                 pLogRecord->Name,
@@ -169,8 +171,9 @@ Return Value:
     return 0;
 }
 
+#pragma warning(disable: 4172)
 
-PVOID
+PCHAR
 getProtectionFolder()
 {
     PLOG_RECORD pLogRecord;
@@ -178,32 +181,47 @@ getProtectionFolder()
     PCOMMAND_MESSAGE pcommandMessage;
 
     DWORD bytesReturned = 0;
+    DWORD bufferlen;
 
     ULONG ret;
 
-    UCHAR buffer[255];
+    static UCHAR buffer[512] = {0};
 
     pcommandMessage = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, ROUND_TO_SIZE( sizeof(COMMAND_MESSAGE) + sizeof(UNICODE_NULL), sizeof(PVOID)));
 
     pcommandMessage->Command = GetMiniSpyProtectionFolder;
+
     pcommandMessage->Reserved = ROUND_TO_SIZE( sizeof(COMMAND_MESSAGE) + sizeof(UNICODE_NULL), sizeof(PVOID));
 
     RetrieveCmd(pcommandMessage, &pLogRecord, &bytesReturned);
 
-    ret = WideCharToMultiByte(CP_ACP, 0, pLogRecord->Name, -1, buffer, 255, NULL, NULL);
+    assert( bytesReturned >= pLogRecord->Length );
 
-    if(ret != 0) {
+    bufferlen = (pLogRecord->Length - sizeof(LOG_RECORD))/2;
+
+    assert(bufferlen < 512 );
+    
+    ret = WideCharToMultiByte(CP_ACP, 0, pLogRecord->Name, bufferlen, buffer, 512, NULL, NULL);
+
+    if(ret == 0) {
         
         ret = GetLastError();
 
         printf("WideCharToMultiBytes Faield with code: %x", ret);
+   
     }
+    else
+    {
+        buffer[bufferlen] = '\0'; 
 
         printf("The current protection floder is:  %s\n",  buffer);
+    }
 
     HeapFree(GetProcessHeap(), 0, pcommandMessage);
 
     HeapFree(GetProcessHeap(), 0, pLogRecord);
+
+	return buffer;
 }
 
 PVOID 
@@ -223,7 +241,7 @@ setProtectionFolder(WCHAR* protectionFloder)
     RtlCopyMemory(
     &pcommandMessage->Data[0],
     protectionFloder,
-    wcslen(protectionFloder)*2,
+    wcslen(protectionFloder)*2
     );
 
     RetrieveCmd(pcommandMessage, &pLogRecord, &bytesReturned);  
@@ -235,8 +253,41 @@ setProtectionFolder(WCHAR* protectionFloder)
     HeapFree(GetProcessHeap(), 0, pcommandMessage);
 
     HeapFree(GetProcessHeap(), 0, pLogRecord);  
+	return NULL;
 }
 
+
+PVOID 
+setOpenProcess(WCHAR* proc)
+{
+    PLOG_RECORD pLogRecord = NULL;
+
+    PCOMMAND_MESSAGE pcommandMessage;
+
+    DWORD bytesReturned = 0;
+
+    pcommandMessage = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, ROUND_TO_SIZE( sizeof(COMMAND_MESSAGE) + wcslen(proc)*2 + sizeof(UNICODE_NULL), sizeof(PVOID)));
+
+    pcommandMessage->Command = SetMiniSpyOpenProccess;
+    pcommandMessage->Reserved = ROUND_TO_SIZE( sizeof(COMMAND_MESSAGE) + wcslen(proc)*2 + sizeof(UNICODE_NULL), sizeof(PVOID));
+
+    RtlCopyMemory(
+    &pcommandMessage->Data[0],
+    proc,
+    wcslen(proc)*2
+    );
+
+    RetrieveCmd(pcommandMessage, &pLogRecord, &bytesReturned);  
+
+    if(pLogRecord->Data.Reserved ==0)
+
+        printf("Set Protection Floder successful!\n");
+    
+    HeapFree(GetProcessHeap(), 0, pcommandMessage);
+
+    HeapFree(GetProcessHeap(), 0, pLogRecord);  
+	return NULL;
+}
 
 VOID
 DisplayError (
@@ -340,6 +391,7 @@ Return Value:
     printf("    %ws\n", buffer);
 }
 
+
 //
 //  Main uses a loop which has an assignment in the while 
 //  conditional statement. Suppress the compiler's warning.
@@ -347,6 +399,8 @@ Return Value:
 
 #pragma warning(push)
 #pragma warning(disable:4706) // assignment within conditional expression
+
+#ifndef __DLL_EXPORT__
 
 int _cdecl
 main (
@@ -621,6 +675,8 @@ Main_Exit:
     return 0;
 }
 
+#endif  //__DLL_EXPORT__
+
 #pragma warning(pop)
 
 DWORD
@@ -645,7 +701,7 @@ Return Value:
     PCHAR parm;
     HRESULT hResult;
     DWORD returnValue = SUCCESS;
-    CHAR buffer[BUFFER_SIZE];
+    WCHAR buffer[BUFFER_SIZE/2];
     DWORD bufferLength;
     PWCHAR instanceString;
     WCHAR instanceName[INSTANCE_NAME_MAX_CHARS + 1];
@@ -890,44 +946,60 @@ Return Value:
             
             case 's':
             case 'S':
-
-                //
-                //  set Protection folder.
-                //
-                parmIndex++;
-
-                if (parmIndex >= argc) {
-
+                {
+                    CHAR dir[MAX_PATH];
+                    ULONG len;
                     //
-                    // Not enough parameters
+                    //  set Protection folder.
                     //
+                    parmIndex++;
 
-                    goto InterpretCommand_Usage;
+                    if (parmIndex >= argc) {
+
+                        //
+                        // Not enough parameters
+                        //
+
+                        goto InterpretCommand_Usage;
+                    }
+
+                    parm = dir; 
+                    len = MAX_PATH;
+                    for( parmIndex; parmIndex < argc; parmIndex++)
+                    {
+                        strncpy_s(parm, len, argv[parmIndex], strlen(argv[parmIndex]));
+                        parm += strlen(parm);
+                        len -= strlen(parm);
+                        if(argc > parmIndex+1){
+                            strncpy_s(parm, len, " ", 1);
+                            parm++;
+                        }
+                    }
+
+                    *parm = '\0';
+                    parm = dir;            
+
+                    printf( " Setting Protection floder: %s\n", parm );
+
+                    bufferLength = MultiByteToWideChar( CP_ACP,
+                                                        MB_ERR_INVALID_CHARS,
+                                                        parm,
+                                                        -1,
+                                                        (LPWSTR)buffer,
+                                                        BUFFER_SIZE/sizeof( WCHAR ) );
+
+                    if (bufferLength == 0) {
+
+                        //
+                        //  We do not expect the user to provide a parm that
+                        //  causes buffer to overflow.
+                        //
+
+                        goto InterpretCommand_Usage; 
+                    }
+
+                    setProtectionFolder(buffer);
                 }
-
-                parm = argv[parmIndex];
-
-                printf( " Setting Protection floder: %s\n", parm );
-
-                bufferLength = MultiByteToWideChar( CP_ACP,
-                                                    MB_ERR_INVALID_CHARS,
-                                                    parm,
-                                                    -1,
-                                                    (LPWSTR)buffer,
-                                                    BUFFER_SIZE/sizeof( WCHAR ) );
-
-                if (bufferLength == 0) {
-
-                    //
-                    //  We do not expect the user to provide a parm that
-                    //  causes buffer to overflow.
-                    //
-
-                    goto InterpretCommand_Usage; 
-                }
-
-                setProtectionFolder(buffer);
-
                 break;
 
             case 'g':
@@ -939,6 +1011,48 @@ Return Value:
                 
                 break;
 
+            case 'e':
+            case 'E':
+                {
+                    //
+                    //  set Protection folder.
+                    //
+                    parmIndex++;
+
+                    if (parmIndex >= argc) {
+
+                        //
+                        // Not enough parameters
+                        //
+
+                        goto InterpretCommand_Usage;
+                    }
+
+                    parm = argv[parmIndex];
+
+                    printf( " Setting Proccess Name: %s to accesss then protction floder.\n ", parm );
+
+                    bufferLength = MultiByteToWideChar( CP_ACP,
+                                                        MB_ERR_INVALID_CHARS,
+                                                        parm,
+                                                        -1,
+                                                        (LPWSTR)buffer,
+                                                        BUFFER_SIZE/sizeof( WCHAR ) );
+
+                    if (bufferLength == 0) {
+
+                        //
+                        //  We do not expect the user to provide a parm that
+                        //  causes buffer to overflow.
+                        //
+
+                        goto InterpretCommand_Usage; 
+                    }
+
+                    setOpenProcess(buffer);
+                }
+
+                break;
 
             default:
 
@@ -991,6 +1105,7 @@ InterpretCommand_Usage:
            "    [/l] lists all the drives the monitor is currently attached to\n"
            "    [/s] turns on and off showing logging output on the screen\n"
            "    [/f [<file name>]] turns on and off logging to the specified file\n"
+           "    [/e <proccess>] set proccess to access the protection folder.\n"
            "    [/g] get the protection floder. \n"
            "    [/s <dirname>] set protection floder"
            "  If you are in command mode:\n"
@@ -1112,7 +1227,7 @@ Return Value:
     __nullterminated WCHAR driveLetter[15] = { 0 };
     ULONG instanceCount;
 
-    try {
+    __try {
 
         //
         //  Find out size of buffer needed
@@ -1126,7 +1241,7 @@ Return Value:
 
         if (IS_ERROR( hResult )) {
 
-             leave;
+             __leave;
         }
 
         assert( INVALID_HANDLE_VALUE != volumeIterator );
@@ -1180,7 +1295,7 @@ Return Value:
             hResult = S_OK;
         }
 
-    } finally {
+    } __finally {
 
         if (INVALID_HANDLE_VALUE != volumeIterator) {
 

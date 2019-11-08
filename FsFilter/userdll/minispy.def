@@ -1,0 +1,8 @@
+LIBRARY			minispy
+EXPORTS
+				DllCanUnloadNow         PRIVATE
+				getProtectionFolder
+                setProtectionFolder
+				setOpenProcess
+				GetRecords
+

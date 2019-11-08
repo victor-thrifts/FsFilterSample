@@ -1,4 +1,4 @@
-/*++
+﻿/*++
 
 Module Name:
 
@@ -28,6 +28,7 @@ Environment:
 
 #include "mspyKern.h"
 #include "swapBuffers.h"
+#include "Process.h"
 #include "fsFilter.h"
 
 #include <wchar.h>
@@ -61,10 +62,13 @@ Environment:
 PFLT_FILTER gFilterHandle;
 ULONG_PTR OperationStatusCtx = 1;
 #define PROTECTIONDIRNAME L"ProtectedDir"
+#define OPENPROCCESS L"OpenProccess"
 const UNICODE_STRING DEFAULTPROTECTIONDIRNAME = RTL_CONSTANT_STRING(L"\\EncryptionMinifilterDir\\");
 const UNICODE_STRING ProtectedFilExt = RTL_CONSTANT_STRING(L".txt");
+const UNICODE_STRING DEFAULTOPENPROCCESS = RTL_CONSTANT_STRING(L"a.exe");
 UNICODE_STRING ProtectedDirName;
 UNICODE_STRING registryPath;
+UNICODE_STRING openProccess;
 
 
 /*************************************************************************
@@ -74,6 +78,7 @@ Pool Tags
 #define CONTEXT_TAG         'cBS_'
 #define PRE_2_POST_TAG      'pBS_'
 #define P_DIR_TAG			'RID_'
+#define P_PRC_TAG			'CRP_'
 #define REG_TAG				'GER_'
 #define DBG_TAG				'gbd_'
 
@@ -165,6 +170,11 @@ CONST FLT_OPERATION_REGISTRATION Callbacks[] = {
 	PreOperation,
 	PostOperation },
 
+	{ IRP_MJ_SHUTDOWN,
+      0,
+      PreOperationNoPostOperation,
+      NULL },                               //post operations not supported
+
 #if 0 // TODO - List all of the requests to filter.
 
     { IRP_MJ_CREATE_NAMED_PIPE,
@@ -221,11 +231,6 @@ CONST FLT_OPERATION_REGISTRATION Callbacks[] = {
       0,
       PreOperation,
       PostOperation },
-
-    { IRP_MJ_SHUTDOWN,
-      0,
-      PreOperationNoPostOperation,
-      NULL },                               //post operations not supported
 
     { IRP_MJ_LOCK_CONTROL,
       0,
@@ -421,6 +426,7 @@ None.
 	ULONG resultLength = 0;    
    	PKEY_VALUE_PARTIAL_INFORMATION pValuePartialInfo = NULL;
 	WCHAR* buffer = NULL; 
+	WCHAR* buffer1 = NULL;
 	WCHAR* pDir = NULL;
 
 	//SwapReadDriverParameters(RegistryPath);
@@ -488,16 +494,77 @@ None.
         ASSERT( pValuePartialInfo->Type == REG_SZ );
 		buffer = ExAllocatePoolWithTag(NonPagedPool, pValuePartialInfo->DataLength + sizeof(UNICODE_NULL), P_DIR_TAG);
 		RtlCopyMemory(buffer, pValuePartialInfo->Data, pValuePartialInfo->DataLength);
-		buffer[pValuePartialInfo->DataLength] = UNICODE_NULL;
+		buffer[pValuePartialInfo->DataLength/sizeof(UNICODE_NULL)] = UNICODE_NULL;
 		RtlInitUnicodeString(&ProtectedDirName, buffer);
     } else {
 		buffer = ExAllocatePoolWithTag(NonPagedPool, DEFAULTPROTECTIONDIRNAME.Length + sizeof(UNICODE_NULL), P_DIR_TAG);
 		RtlCopyMemory(buffer, DEFAULTPROTECTIONDIRNAME.Buffer, DEFAULTPROTECTIONDIRNAME.Length);
-		buffer[DEFAULTPROTECTIONDIRNAME.Length] = UNICODE_NULL;
+		buffer[DEFAULTPROTECTIONDIRNAME.Length/sizeof(UNICODE_NULL)] = UNICODE_NULL;
 		RtlInitUnicodeString(&ProtectedDirName, buffer);
 	}
 
 	ExFreePoolWithTag(pValuePartialInfo, DBG_TAG);
+
+	DbgPrint("\n ProtectedDirName is %S\n", ProtectedDirName.Buffer);
+
+
+	//
+    // Read the OpenProccess entry from the registry
+    //
+
+	RtlInitUnicodeString( &valueName, OPENPROCCESS );
+
+	status = ZwQueryValueKey( driverRegKey,
+                              &valueName,
+                              KeyValuePartialInformation,
+                              pValuePartialInfo,
+                              0,  
+                              &resultLength );
+
+	if(STATUS_OBJECT_NAME_NOT_FOUND == status || STATUS_INVALID_PARAMETER == status) return;
+
+	if( STATUS_BUFFER_OVERFLOW == status || STATUS_BUFFER_TOO_SMALL == status ) {
+		
+		//
+		//  Allocate nonPaged memory for the buffer we are swapping to.
+		//  If we fail to get the memory, just don't swap buffers on this
+		//  operation.
+		//
+
+		pValuePartialInfo = ExAllocatePoolWithTag(NonPagedPool, resultLength, DBG_TAG);
+		if (pValuePartialInfo == NULL) {
+			LOG_PRINT(LOGFL_ERRORS, 
+				("fsFilter!ExAllocatePoolWithTag-openProccess: Failed to allocate %d bytes of memory\n", resultLength));
+			return;
+		}	
+	}
+
+	status = ZwQueryValueKey( driverRegKey,
+							&valueName,
+							KeyValuePartialInformation,
+							pValuePartialInfo,
+							resultLength,
+							&resultLength );	
+
+    if (NT_SUCCESS( status )) {
+
+        ASSERT( pValuePartialInfo->Type == REG_SZ );
+		buffer1 = ExAllocatePoolWithTag(NonPagedPool, pValuePartialInfo->DataLength + sizeof(UNICODE_NULL), P_PRC_TAG);
+		RtlCopyMemory(buffer1, pValuePartialInfo->Data, pValuePartialInfo->DataLength);
+		buffer1[pValuePartialInfo->DataLength/sizeof(UNICODE_NULL)] = UNICODE_NULL;
+		RtlInitUnicodeString(&openProccess, buffer1);
+    } else {
+		buffer1 = ExAllocatePoolWithTag(NonPagedPool, DEFAULTOPENPROCCESS.Length + sizeof(UNICODE_NULL), P_PRC_TAG);
+		RtlCopyMemory(buffer1, DEFAULTOPENPROCCESS.Buffer, DEFAULTOPENPROCCESS.Length);
+		buffer1[DEFAULTOPENPROCCESS.Length/sizeof(UNICODE_NULL)] = UNICODE_NULL;
+		RtlInitUnicodeString(&openProccess, buffer1);
+	}
+
+	ExFreePoolWithTag(pValuePartialInfo, DBG_TAG);
+
+	//
+	// RegisterPath 
+	//
 
 	pDir = ExAllocatePoolWithTag(NonPagedPool, MAX_PATH, REG_TAG);
 	ASSERT(RegistryPath->Length + sizeof(UNICODE_NULL) < MAX_PATH);
@@ -506,7 +573,7 @@ None.
 	RtlInitUnicodeString(&registryPath, pDir);
 	registryPath.Length = RegistryPath->Length;
 
-	DbgPrint("\n ProtectedDirName is %s", ProtectedDirName.Buffer);
+	ZwClose(driverRegKey);
 	
 	return;
 }
@@ -546,6 +613,7 @@ None.
     //  Open the registry
     //
 
+	if(NULL == RegistryPath) return;
 
     InitializeObjectAttributes( &attributes,
                                 RegistryPath,
@@ -563,7 +631,7 @@ None.
     }
 
     //
-    // Read the PROTECTIONDIRNAME entry from the registry
+    // Set the PROTECTIONDIRNAME entry from the registry
     //
 
     RtlInitUnicodeString( &valueName, PROTECTIONDIRNAME );
@@ -580,6 +648,25 @@ None.
     status = ZwSetValueKey(driverRegKey,&valueName,0,REG_SZ,ProtectedDirName.Buffer,ProtectedDirName.Length);
 
     if (!NT_SUCCESS(status)){ DbgPrint("\n Write protecteddirname value failed!\n"); };
+
+    //
+    // Set the OPENPROCCESS entry from the registry
+    //
+
+    RtlInitUnicodeString( &valueName, OPENPROCCESS );
+
+	status = ZwQueryValueKey( driverRegKey,
+                              &valueName,
+                              KeyValuePartialInformation,
+                              buffer,
+                              0,  
+                              &resultLength );
+
+	if(STATUS_OBJECT_NAME_NOT_FOUND == status || STATUS_INVALID_PARAMETER == status) return;
+
+    status = ZwSetValueKey(driverRegKey, &valueName, 0, REG_SZ, openProccess.Buffer, openProccess.Length);
+
+    if (!NT_SUCCESS(status)){ DbgPrint("\n Write openProccess value failed!\n"); };	
     
 	ZwClose(driverRegKey);
 	
@@ -711,7 +798,7 @@ Return Value:
 /*************************************************************************
     MiniFilter initialization and unload routines.
 *************************************************************************/
-
+DRIVER_INITIALIZE DriverEntry;
 NTSTATUS
 DriverEntry (
     __in PDRIVER_OBJECT DriverObject,
@@ -742,6 +829,8 @@ Return Value:
 	ReadDriverParameters(RegistryPath);
 
 	if(ProtectedDirName.Buffer == NULL) return STATUS_UNSUCCESSFUL;
+
+	if(openProccess.Buffer == NULL) return STATUS_UNSUCCESSFUL;
 
     PT_DBG_PRINT( PTDBG_TRACE_ROUTINES,
                   ("!DriverEntry: Entered\n") );
@@ -800,10 +889,10 @@ Return Value:
 
 --*/
 {
-	UNICODE_STRING valueName;
-	OBJECT_ATTRIBUTES attributes;
-	HANDLE driverRegKey;
-	NTSTATUS status;	
+	//UNICODE_STRING valueName;
+	//OBJECT_ATTRIBUTES attributes;
+	// HANDLE driverRegKey;
+	//NTSTATUS status;	
     UNREFERENCED_PARAMETER( Flags );
 
     PAGED_CODE();
@@ -856,9 +945,9 @@ Return Value:
 {
     NTSTATUS status;
 	PFLT_IO_PARAMETER_BLOCK iopb;
-	UNICODE_STRING VolumName;
+	//UNICODE_STRING VolumName;
 	FLT_PREOP_CALLBACK_STATUS retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;	  //FLT_PREOP_SUCCESS_WITH_CALLBACK
-	POBJECT_NAME_INFORMATION ObjectNameInf = NULL;
+	//POBJECT_NAME_INFORMATION ObjectNameInf = NULL;
 	iopb = Data->Iopb;
 
 	if(!Data || !FltObjects || !FltObjects->FileObject)
@@ -881,8 +970,8 @@ Return Value:
 	//DbgPrint("\n MN=0x%08x IRP=0x%08x \n", iopb->MajorFunction, iopb->MinorFunction);
 
 	if (IRP_MJ_CREATE == iopb->MajorFunction) {
-		//retValue = PreCreate(Data, FltObjects, CompletionContext);
-		retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
+		retValue = PreCreate(Data, FltObjects, CompletionContext);
+		//retValue = FLT_PREOP_SUCCESS_NO_CALLBACK;
 	}
 	else if (IRP_MJ_READ == iopb->MajorFunction) {
 		//retValue = PreReadBuffers(Data, FltObjects, CompletionContext);
@@ -913,7 +1002,7 @@ Return Value:
     if (DoRequestOperationStatus( Data )) {
 
         status = FltRequestOperationStatusCallback( Data,
-                                                    OperationStatusCallback,
+                                                    PfltGetOperationStatusCallback,
                                                     (PVOID)(++OperationStatusCtx) );
         if (!NT_SUCCESS(status)) {
 
@@ -934,7 +1023,7 @@ Return Value:
 
 
 VOID
-OperationStatusCallback (
+PfltGetOperationStatusCallback (
     __in PCFLT_RELATED_OBJECTS FltObjects,
     __in PFLT_IO_PARAMETER_BLOCK ParameterSnapshot,
     __in NTSTATUS OperationStatus,
@@ -1081,9 +1170,16 @@ Return Value:
 
 --*/
 {
-    UNREFERENCED_PARAMETER( Data );
+	PFLT_IO_PARAMETER_BLOCK iopb = Data->Iopb;
+    //UNREFERENCED_PARAMETER( Data );
     UNREFERENCED_PARAMETER( FltObjects );
     UNREFERENCED_PARAMETER( CompletionContext );
+
+
+	if(IRP_MJ_SHUTDOWN == iopb->MajorFunction)
+	{
+		WriteDriverParameters();
+	}
 
     PT_DBG_PRINT( PTDBG_TRACE_ROUTINES,
                   ("!PreOperationNoPostOperation: Entered\n") );
@@ -1148,7 +1244,7 @@ Return Value:
 
 
 BOOLEAN
-RtlFindSubString(__in PUNICODE_STRING String, __in PUNICODE_STRING SubString)
+RtlFindSubString(__in const PUNICODE_STRING String, __in const UNICODE_STRING *SubString)
 /*++
 
 Routine Description:
@@ -1164,8 +1260,8 @@ otherwise.
 
 --*/
 {
-	ULONG index;
-	KSPIN_LOCK compareLock;
+	USHORT index;
+	//KSPIN_LOCK compareLock;
 	//KIRQL oldIrql;
 	BOOLEAN ret = FALSE;
 
@@ -1195,7 +1291,7 @@ otherwise.
 		}
 	}
 
-__Finally:
+//__Finally:
 
    // KeReleaseSpinLock(&compareLock, oldIrql);
 
@@ -1216,27 +1312,36 @@ BOOLEAN IsProtectionFileByProtectedFilExt(PFLT_FILE_NAME_INFORMATION NameInfos)
 	return bProtect;
 }
 
+BOOLEAN IsOpenProccess()
+{
+	BOOLEAN ret = FALSE;
+	FILE_ID ProcessId;
+	PUNICODE_STRING ProcessImageName;
+	WCHAR strBuffer[(sizeof(UNICODE_STRING) + MAX_PATH*2)/sizeof(WCHAR)];
+
+    ProcessId  = (FILE_ID)PsGetCurrentProcessId();
+
+    ProcessImageName = (PUNICODE_STRING)strBuffer;
+    ProcessImageName->MaximumLength  = sizeof(UNICODE_STRING) + MAX_PATH*2;
+    ProcessImageName->Length = 0;
+
+    GetProcessImageName((HANDLE)ProcessId, ProcessImageName);
+
+	// 判断
+	if (TRUE == FsRtlIsNameInExpression(&openProccess, ProcessImageName, FALSE, NULL))
+	{
+		ret = TRUE;
+	}
+
+	return ret;
+}
+
 BOOLEAN IsProtectionFileByProtectedDirName(PFLT_FILE_NAME_INFORMATION NameInfos)
 {
 	BOOLEAN bProtect = FALSE;
 
 	// 判断
 	if (TRUE == RtlFindSubString(&NameInfos->Name, &ProtectedDirName))
-	{
-		bProtect = TRUE;
-	}
-
-	return bProtect;
-}
-
-BOOLEAN IsProtectionFileByProtectedDirName1(PFLT_FILE_NAME_INFORMATION NameInfos)
-{
-	BOOLEAN bProtect = FALSE;
-
-	UNICODE_STRING tmp;
-	RtlInitUnicodeString(&tmp, L"\\doc\\");
-	// 判断
-	if (TRUE == RtlFindSubString(&NameInfos->Name, &tmp))
 	{
 		bProtect = TRUE;
 	}
@@ -1286,6 +1391,9 @@ FLT_PREOP_SUCCESS_NO_CALLBACK - we don't want a postOperation callback
 	PFLT_IO_PARAMETER_BLOCK iopb = Data->Iopb;
 	NTSTATUS status;
 	PFLT_FILE_NAME_INFORMATION FileNameInformation = NULL; 
+
+	UNREFERENCED_PARAMETER(CompletionContext);
+	UNREFERENCED_PARAMETER(FltObjects);
 
 	return FLT_PREOP_SUCCESS_NO_CALLBACK;
 
@@ -1382,7 +1490,7 @@ FLT_PREOP_SUCCESS_NO_CALLBACK - we don't want a postOperation callback
 FLT_PREOP_COMPLETE -
 --*/
 {
-	PFLT_IO_PARAMETER_BLOCK iopb = Data->Iopb;
+	//PFLT_IO_PARAMETER_BLOCK iopb = Data->Iopb;
 	NTSTATUS status;
 	PFLT_FILE_NAME_INFORMATION FileNameInformation = NULL;
 
@@ -1395,12 +1503,20 @@ FLT_PREOP_COMPLETE -
 	if (NT_SUCCESS(status)) {
 		status = FltParseFileNameInformation(FileNameInformation);
 		if (NT_SUCCESS(status)) {
-			if (TRUE == IsProtectionFile(FileNameInformation))
+			if (TRUE == IsProtectionFile(FileNameInformation))																//禁止出现对应名称的文件Rename。								
 			{
-				Data->IoStatus.Status = STATUS_ACCESS_DENIED;
-				Data->IoStatus.Information = 0;
-				FltReleaseFileNameInformation(FileNameInformation);
-				return FLT_PREOP_COMPLETE;
+				if(IsOpenProccess())
+				{
+					FltReleaseFileNameInformation(FileNameInformation);
+					return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
+				}
+				else
+				{
+					Data->IoStatus.Status = STATUS_ACCESS_DENIED;
+					Data->IoStatus.Information = 0;
+					FltReleaseFileNameInformation(FileNameInformation);
+					return FLT_PREOP_COMPLETE;
+				}
 			}
 		}
 		FltReleaseFileNameInformation(FileNameInformation);
@@ -1410,8 +1526,8 @@ FLT_PREOP_COMPLETE -
 	// if (iopb->IrpFlags & IRP_PAGING_IO) DbgPrint("\n PreWrite IRP : 0x%08x ops IRP_PAGING_IO", iopb->IrpFlags);
 
 	//return SwapPreWriteBuffers(Data, FltObjects, CompletionContext);
-	return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
-	//return FLT_PREOP_SUCCESS_NO_CALLBACK;
+	//return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
+	return FLT_PREOP_SUCCESS_NO_CALLBACK;
 }
 
 VOID
@@ -1473,6 +1589,12 @@ FLT_POSTOP_MORE_PROCESSING_REQUIRED
 --*/
 {
 	NTSTATUS status = FLT_POSTOP_FINISHED_PROCESSING;
+
+	UNREFERENCED_PARAMETER(Flags);
+	UNREFERENCED_PARAMETER(CompletionContext);
+	UNREFERENCED_PARAMETER(FltObjects);
+	UNREFERENCED_PARAMETER(Data);
+
 	//status = SwapPostReadBuffers(Data,FltObjects,CompletionContext,Flags);
 	//status = SpyPostOperationCallback(Data, FltObjects, CompletionContext, Flags);
 	return status;
@@ -1499,10 +1621,23 @@ Return Value:
 --*/
 {
 	NTSTATUS status = FLT_POSTOP_FINISHED_PROCESSING;
+	PFLT_FILE_NAME_INFORMATION FileNameInformation = NULL; 
 	//status = SwapPostReadBuffers(Data, FltObjects, CompletionContext,Flags);
-	//if(TRUE == IsProtectionFile(Data)) 
-	status = SpyPostOperationCallback(Data, FltObjects, CompletionContext, Flags);
-	return status;
+
+	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED | FLT_FILE_NAME_QUERY_DEFAULT, &FileNameInformation);
+	if (NT_SUCCESS(status)) {
+		status = FltParseFileNameInformation(FileNameInformation);
+		if (NT_SUCCESS(status)) {
+			if(IsOpenProccess())
+			{
+				FltReleaseFileNameInformation(FileNameInformation);
+				status = SpyPostOperationCallback(Data, FltObjects, CompletionContext, Flags);
+				return status;
+			}
+		}
+		FltReleaseFileNameInformation(FileNameInformation);
+	}
+	return FLT_POSTOP_FINISHED_PROCESSING;
 }
 
 FLT_POSTOP_CALLBACK_STATUS
@@ -1525,10 +1660,23 @@ Return Value:
 --*/
 {
 	NTSTATUS status = FLT_POSTOP_FINISHED_PROCESSING;
+	PFLT_FILE_NAME_INFORMATION FileNameInformation = NULL; 
 	//status = SwapPostReadBuffers(Data, FltObjects, CompletionContext,Flags);
-	//if(TRUE == IsProtectionFile(Data)) 
-	status = SpyPostOperationCallback(Data, FltObjects, CompletionContext, Flags);
-	return status;	
+
+	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED | FLT_FILE_NAME_QUERY_DEFAULT, &FileNameInformation);
+	if (NT_SUCCESS(status)) {
+		status = FltParseFileNameInformation(FileNameInformation);
+		if (NT_SUCCESS(status)) {
+			if(IsOpenProccess())
+			{
+				status = SpyPostOperationCallback(Data, FltObjects, CompletionContext, Flags);
+				FltReleaseFileNameInformation(FileNameInformation);
+				return status;
+			}
+		}
+		FltReleaseFileNameInformation(FileNameInformation);
+	}
+	return FLT_POSTOP_FINISHED_PROCESSING;	
 }
 
 FLT_POSTOP_CALLBACK_STATUS
@@ -1602,14 +1750,32 @@ PreCreate(
 	if (Position & FILE_DIRECTORY_FILE)
 		return FLT_PREOP_SUCCESS_NO_CALLBACK;								//如果发现是文件夹选项直接返回
 
-	if (CreatePosition == FILE_OPEN)
-		return FLT_PREOP_SUCCESS_NO_CALLBACK;								//如果是FILE_OPEN打开文件，直接返回
+	 if (CreatePosition == FILE_OPEN)
+	 	return FLT_PREOP_SUCCESS_NO_CALLBACK;								//如果是FILE_OPEN打开文件，直接返回
 
 	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED | FLT_FILE_NAME_QUERY_DEFAULT, &NameInfo);
 	if (!NT_SUCCESS(status))
 	{
 		KdPrint(("Query Name Fail!\n"));
 		return FLT_PREOP_SUCCESS_NO_CALLBACK;
+	}
+
+	if (TRUE == IsProtectionFile(NameInfo))																//禁止出现对应名称的文件Rename。								
+	{
+		if(IsOpenProccess())
+		{
+			FltReleaseFileNameInformation(NameInfo);
+			//return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
+			return FLT_PREOP_SUCCESS_NO_CALLBACK;
+		}
+		else
+		{
+			//FltCancelFileOpen(Data->Iopb->TargetFileObject,FltObjects->Instance);
+			Data->IoStatus.Status = STATUS_ACCESS_DENIED;
+			Data->IoStatus.Information = 0;
+			FltReleaseFileNameInformation(NameInfo);
+			return FLT_PREOP_COMPLETE;
+		}
 	}
 
 	status = FltParseFileNameInformation(NameInfo);
@@ -1620,20 +1786,20 @@ PreCreate(
 		return FLT_PREOP_SUCCESS_NO_CALLBACK;
 	}
 
-	// if (FALSE == IsProtectionFile(NameInfo))                                   //只允许保护类文件创建
-	// {
-	// 	Data->IoStatus.Status = STATUS_ACCESS_DENIED;
-	// 	Data->IoStatus.Information = 0;
-	// 	FltReleaseFileNameInformation(NameInfo);
-	// 	return FLT_PREOP_COMPLETE;
-	// }
-
 	//如果这里出现了****IF代表如果存在则****，否则创建，所以需要先判断是否存在，如果存在则不在过滤范围，否则就是过滤范围内了。
 	if (CreatePosition == FILE_OPEN_IF || CreatePosition == FILE_OVERWRITE_IF)						
 	{
 		//KdPrint(("FILE_OPEN_IF OR FILE_OVERWRITE_IF\n"));
 		if (NT_SUCCESS(JudgeFileExist(&NameInfo->Name)))
 		{
+			if (TRUE == IsProtectionFile(NameInfo))                                   //只允许保护类文件创建
+			{
+				Data->IoStatus.Status = STATUS_ACCESS_DENIED;
+				Data->IoStatus.Information = 0;
+				//IoCompleteRequest(Data, IO_NO_INCREMENT);
+				FltReleaseFileNameInformation(NameInfo);
+				return FLT_PREOP_COMPLETE;
+			}
 			//KdPrint(("文件已经存在！\n"));
 			FltReleaseFileNameInformation(NameInfo);
 			return FLT_PREOP_SUCCESS_NO_CALLBACK;
@@ -1642,9 +1808,9 @@ PreCreate(
 
 	FltReleaseFileNameInformation(NameInfo);
 
-	status = SpyPreOperationCallback(Data, FltObjects, CompletionContext);
+	//status = SpyPreOperationCallback(Data, FltObjects, CompletionContext);
 
-	return status;
+	return FLT_PREOP_SUCCESS_NO_CALLBACK;
 }
 
 
@@ -1672,18 +1838,26 @@ FLT_PREOP_CALLBACK_STATUS PreReNameFile(PFLT_CALLBACK_DATA Data, PCFLT_RELATED_O
 
 	if (TRUE == IsProtectionFile(NameInfo))																//禁止出现对应名称的文件Rename。								
 	{
-		Data->IoStatus.Status = STATUS_ACCESS_DENIED;
-		Data->IoStatus.Information = 0;
-		FltReleaseFileNameInformation(NameInfo);
-		return FLT_PREOP_COMPLETE;
+		if(IsOpenProccess())
+		{
+			FltReleaseFileNameInformation(NameInfo);
+			return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
+		}
+		else
+		{
+			Data->IoStatus.Status = STATUS_ACCESS_DENIED;
+			Data->IoStatus.Information = 0;
+			FltReleaseFileNameInformation(NameInfo);
+			return FLT_PREOP_COMPLETE;
+		}
 	}
 
 	//if(TRUE == IsProtectionFileByProtectedDirName1(NameInfo))
 	//	return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
 
 	FltReleaseFileNameInformation(NameInfo);
-	return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
-	//return FLT_PREOP_SUCCESS_NO_CALLBACK;
+	//return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
+	return FLT_PREOP_SUCCESS_NO_CALLBACK;
 }
 	  
 FLT_PREOP_CALLBACK_STATUS PreDeleteFile(PFLT_CALLBACK_DATA Data, PCFLT_RELATED_OBJECTS FltObjects, __deref_out_opt PVOID *CompletionContext)
@@ -1698,8 +1872,8 @@ FLT_PREOP_CALLBACK_STATUS PreDeleteFile(PFLT_CALLBACK_DATA Data, PCFLT_RELATED_O
 		return FLT_PREOP_SUCCESS_NO_CALLBACK;
 	}
 
-	if (isDir)
-		return FLT_PREOP_SUCCESS_NO_CALLBACK;					//这里代表如果是文件夹，就不去管它。
+	//if (isDir)
+	//	return FLT_PREOP_SUCCESS_NO_CALLBACK;					//这里代表如果是文件夹，就不去管它。
 
 	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED
 		| FLT_FILE_NAME_QUERY_DEFAULT, &NameInfo);
@@ -1718,20 +1892,28 @@ FLT_PREOP_CALLBACK_STATUS PreDeleteFile(PFLT_CALLBACK_DATA Data, PCFLT_RELATED_O
 		return FLT_PREOP_SUCCESS_NO_CALLBACK;
 	}
 
-	if (TRUE == IsProtectionFile(NameInfo))																//禁止出现对应名称的文件删除。								
+	if (TRUE == IsProtectionFile(NameInfo))																//禁止出现对应名称的文件Rename。								
 	{
-		Data->IoStatus.Status = STATUS_ACCESS_DENIED;
-		Data->IoStatus.Information = 0;
-		FltReleaseFileNameInformation(NameInfo);
-		return FLT_PREOP_COMPLETE;
-	}	
+		if(IsOpenProccess())
+		{
+			FltReleaseFileNameInformation(NameInfo);
+			return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
+		}
+		else
+		{
+			Data->IoStatus.Status = STATUS_ACCESS_DENIED;
+			Data->IoStatus.Information = 0;
+			FltReleaseFileNameInformation(NameInfo);
+			return FLT_PREOP_COMPLETE;
+		}
+	}
 
 	//if(TRUE == IsProtectionFileByProtectedDirName1(NameInfo))
 	//	return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
 
 	FltReleaseFileNameInformation(NameInfo);
-	return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
-	//return FLT_PREOP_SUCCESS_NO_CALLBACK;
+	//return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
+	return FLT_PREOP_SUCCESS_NO_CALLBACK;
 }
 
 FLT_PREOP_CALLBACK_STATUS
@@ -1741,16 +1923,42 @@ PreSetInformation(
 	__deref_out_opt PVOID *CompletionContext
 )
 {
-	UNREFERENCED_PARAMETER(CompletionContext);
+	PFLT_FILE_NAME_INFORMATION NameInfo;
+	NTSTATUS status;
 
 	if (Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileRenameInformation)						//重命名操作
 		return PreReNameFile(Data, FltObjects, CompletionContext);
 
 	else if (Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformation)				//删除操作
-		return PreDeleteFile(Data, FltObjects, CompletionContext);
+		return PreDeleteFile(Data, FltObjects, CompletionContext);	
 
-	else
-		return FLT_PREOP_SUCCESS_NO_CALLBACK;																			//其他操作不管，直接返回SUCCESS
+	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED
+		| FLT_FILE_NAME_QUERY_DEFAULT, &NameInfo);
+
+	if (!NT_SUCCESS(status))
+	{
+		//KdPrint(("Query Name Fail!\n"));
+		return FLT_PREOP_SUCCESS_NO_CALLBACK;
+	}
+	
+	if (TRUE == IsProtectionFile(NameInfo))																//禁止出现对应名称的文件Rename。								
+	{
+		if(IsOpenProccess())
+		{
+			//FltReleaseFileNameInformation(NameInfo);
+			//return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
+		}
+		else
+		{
+			Data->IoStatus.Status = STATUS_ACCESS_DENIED;
+			Data->IoStatus.Information = 0;
+			FltReleaseFileNameInformation(NameInfo);
+			return FLT_PREOP_COMPLETE;
+		}
+	}
+	FltReleaseFileNameInformation(NameInfo);
+
+	return FLT_PREOP_SUCCESS_NO_CALLBACK;																			//其他操作不管，直接返回SUCCESS
 }
 
 
@@ -1817,7 +2025,44 @@ PUNICODE_STRING GetProttectinFolder()
 
 VOID SetProtectionFolder(PUNICODE_STRING dir)
 {
-	RtlCopyUnicodeString(&ProtectedDirName, dir);
-	KdPrint(("!ProtectedDirName is setting to : %wZ", ProtectedDirName.Buffer));
+	WCHAR* buffer;
+	if(ProtectedDirName.Length > 0) ExFreePoolWithTag(ProtectedDirName.Buffer, P_DIR_TAG);
+	buffer = ExAllocatePoolWithTag(NonPagedPool, dir->Length + sizeof(UNICODE_NULL), P_DIR_TAG);
+	//ProtectedDirName.Buffer = buffer;
+	//ProtectedDirName.MaximumLength = dir->Length + sizeof(UNICODE_NULL);
+	//ProtectedDirName.Length = dir->Length;
+	RtlCopyMemory(buffer, dir->Buffer,  dir->Length);
+	buffer[dir->Length/sizeof(UNICODE_NULL)] = UNICODE_NULL;
+	RtlInitUnicodeString(&ProtectedDirName, buffer);
+	KdPrint(("!ProtectedDirName is setting to : %wZ", ProtectedDirName));
 	return;
 }
+
+PUNICODE_STRING GetOpenProccess()
+{
+	return &openProccess;
+}
+
+VOID SetOpenProccess(PUNICODE_STRING proc)
+{
+	WCHAR* buffer;
+	//RtlUpcaseUnicodeString(&openProccess, proc, FALSE);
+	if(openProccess.Length > 0) ExFreePoolWithTag(openProccess.Buffer, P_PRC_TAG);
+	buffer = ExAllocatePoolWithTag(NonPagedPool, proc->Length + sizeof(UNICODE_NULL)*2, P_PRC_TAG);
+	if (buffer == NULL) {
+			LOG_PRINT(LOGFL_ERRORS, 
+				("fsFilter!ExAllocatePoolWithTag-openProccess: Failed to allocate  memory\n"));
+			return;
+	}	
+	//RtlInitUnicodeString(&openProccess, buffer);
+	buffer[0] = L'*';
+	RtlCopyMemory(++buffer, proc->Buffer, proc->Length);
+	buffer[proc->Length/sizeof(UNICODE_NULL)] = UNICODE_NULL;
+	openProccess.Length = proc->Length + sizeof(UNICODE_NULL)*2;
+	openProccess.MaximumLength = proc->Length + sizeof(UNICODE_NULL)*2;
+	//RtlCopyUnicodeString(&openProccess, proc);
+	RtlInitUnicodeString(&openProccess, --buffer);
+	KdPrint(("!openProccess is setting to : %wZ", openProccess));
+	return;
+}
+

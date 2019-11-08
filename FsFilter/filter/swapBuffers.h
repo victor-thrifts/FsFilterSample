@@ -54,6 +54,7 @@ __in PCFLT_RELATED_OBJECTS FltObjects,
 __in FLT_INSTANCE_QUERY_TEARDOWN_FLAGS Flags
 );
 
+DRIVER_INITIALIZE SwapDriverEntry;
 NTSTATUS
 SwapDriverEntry(
 __in PDRIVER_OBJECT DriverObject,

@@ -1,0 +1,38 @@
+TARGETNAME=MINISPY
+TARGETTYPE=DYNLINK
+DLLBASE=0x50000000
+DLLENTRY=_DllMainCRTStartup
+# UMTYPE=console
+USE_MSVCRT=1
+
+MSC_WARNING_LEVEL=/W4 /WX
+
+C_DEFINES=$(C_DEFINES) -DUNICODE -D_UNICODE
+
+LINKLIBS=$(SDK_LIB_PATH)\shell32.lib	\
+           $(SDK_LIB_PATH)\user32.lib  \
+           $(SDK_LIB_PATH)\winspool.lib  \
+           $(SDK_LIB_PATH)\uuid.lib
+		   
+INCLUDES=$(INCLUDES);         \
+         $(IFSKIT_INC_PATH);  \
+         $(DDK_INC_PATH);     \
+
+TARGETLIBS=$(TARGETLIBS) \
+           $(IFSKIT_LIB_PATH)\fltLib.lib	\
+		   $(SDK_LIB_PATH)\kernel32.lib 	\
+		   $(SDK_LIB_PATH)\ole32.lib  
+
+SOURCES=mspyLog.c  \
+        mspyUser.c \
+        interface.c \
+        mspyUser.rc
+
+# Build with Vista libs but make sure sample can still run downlevel
+_NT_TARGET_VERSION=$(_NT_TARGET_VERSION_WINXP)
+NTDDI_VERSION=$(LATEST_NTDDI_VERSION)
+
+!if "$(DDK_TARGET_OS)"=="WinLH"
+_NT_TARGET_VERSION=$(_NT_TARGET_VERSION_WINXP)
+!endif
+

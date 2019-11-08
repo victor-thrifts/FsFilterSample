@@ -880,6 +880,7 @@ Return Value:
 
                         RtlCopyMemory(pLogRecord->Name, PDir->Buffer, PDir->Length);
                         pLogRecord->Reserved = 0;
+                        pLogRecord->Name[PDir->Length/sizeof(UNICODE_NULL)] = UNICODE_NULL;
 
                     } except( EXCEPTION_EXECUTE_HANDLER ) {
 
@@ -915,9 +916,66 @@ Return Value:
                     //
 
                     RtlInitUnicodeString(&Dir, ((PCOMMAND_MESSAGE) InputBuffer)->Data);
-                    Dir.Length = ((PCOMMAND_MESSAGE) InputBuffer)->Reserved - sizeof(COMMAND_MESSAGE);
+                    Dir.Length = (USHORT)((PCOMMAND_MESSAGE) InputBuffer)->Reserved - sizeof(COMMAND_MESSAGE);
                     
                     SetProtectionFolder(&Dir);
+
+                    pLogRecord = (PLOG_RECORD)OutputBuffer;
+
+                    try {
+
+                        pLogRecord->Length =  sizeof( LOG_RECORD ) + ROUND_TO_SIZE( sizeof( UNICODE_NULL ), sizeof( PVOID ) );
+                        //
+                        //  Return the protection folder.  Verify
+                        //  we have a valid user buffer including valid
+                        //  alignment
+                        //
+
+                        if ((OutputBufferSize < pLogRecord->Length ) || (OutputBuffer == NULL)) {
+
+                            status = STATUS_INVALID_PARAMETER;
+                            break;
+                        }
+
+                        pLogRecord->Reserved = 0;
+
+                    } except( EXCEPTION_EXECUTE_HANDLER ) {
+
+                        return GetExceptionCode();
+                    }
+
+                    *ReturnOutputBufferLength = pLogRecord->Length;
+                    status = STATUS_SUCCESS;
+                }
+                break;
+
+                case SetMiniSpyOpenProccess:
+                {
+                    PLOG_RECORD pLogRecord;
+                    UNICODE_STRING proc;
+
+                    //
+                    //  Validate Buffer alignment.  If a minifilter cares about
+                    //  the alignment value of the buffer pointer they must do
+                    //  this check themselves.  Note that a try/except will not
+                    //  capture alignment faults.
+                    //
+
+                    if (!IS_ALIGNED(OutputBuffer,sizeof(ULONG))) {
+
+                        status = STATUS_DATATYPE_MISALIGNMENT;
+                        break;
+                    }
+
+                    //
+                    //  Protect access to raw user-mode output buffer with an
+                    //  exception handler
+                    //
+
+                    RtlInitUnicodeString(&proc, ((PCOMMAND_MESSAGE) InputBuffer)->Data);
+                    proc.Length = (USHORT)((PCOMMAND_MESSAGE) InputBuffer)->Reserved - sizeof(COMMAND_MESSAGE);
+                    
+                    SetOpenProccess(&proc);
 
                     pLogRecord = (PLOG_RECORD)OutputBuffer;
 
@@ -1003,7 +1061,7 @@ Return Value:
     FLT_PREOP_CALLBACK_STATUS returnStatus = FLT_PREOP_SUCCESS_NO_CALLBACK; //assume we are NOT going to call our completion routine
     PRECORD_LIST recordList;
     PFLT_FILE_NAME_INFORMATION nameInfo = NULL;
-    UNICODE_STRING defaultName;
+    //UNICODE_STRING defaultName;
     PUNICODE_STRING nameToUse;
     NTSTATUS status;
 

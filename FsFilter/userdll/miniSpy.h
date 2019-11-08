@@ -20,6 +20,8 @@ Environment:
 #ifndef __MINISPY_H__
 #define __MINISPY_H__
 
+#define __DLL_EXPORT__
+
 
 //
 //  FltMgr's IRP major codes

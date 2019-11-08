@@ -59,6 +59,7 @@ HKR,,"DebugFlags",0x00010001 ,0x0
 HKR,,"MaxRecords",0x00010001 ,%MaxRecords%
 HKR,,"NameQueryMethod",0x00010001,0x00000400
 HKR,,"ProtectedDir",0x00000000,%DefaultProtectedDir%
+HKR,,"OpenProccess",0x00000000,%DefaultOpenProccess%
 HKR,,"SupportedFeatures",0x00010001,0x3
 HKR,"Instances","DefaultInstance",0x00000000,%DefaultInstance%
 HKR,"Instances\"%Instance1.Name%,"Altitude",0x00000000,%Instance1.Altitude%
@@ -89,6 +90,7 @@ ServiceName             = "FsFilter"
 DriverName              = "FsFilter"
 DiskId1                 = "FsFilter Device Installation Disk"
 
+DefaultOpenProccess		= "*aaaa.exe"
 DefaultProtectedDir		= "\EncryptionMinifilterDir\"
 MaxRecords				= 500
 

@@ -439,7 +439,7 @@ Return Value:
 --*/
 {
     PRECORD_DATA recordData = &RecordList->LogRecord.Data;
-    WCHAR* Name = RecordList->LogRecord.Name;
+    //WCHAR* Name = RecordList->LogRecord.Name;
     PDEVICE_OBJECT devObj;
     NTSTATUS status;
     PUNICODE_STRING ProcessImageName;
@@ -474,7 +474,7 @@ Return Value:
     ProcessImageName->MaximumLength  = sizeof(UNICODE_STRING) + MAX_PATH*2;
     ProcessImageName->Length = 0;
 
-    GetProcessImageName(recordData->ProcessId, ProcessImageName);
+    GetProcessImageName((HANDLE)recordData->ProcessId, ProcessImageName);
     SpySetRecordName( &(RecordList->LogRecord), ProcessImageName );
 
     // status = PsLookupProcessByProcessId(recordData->ProcessId, PEprocess);
@@ -533,7 +533,9 @@ Return Value:
 
 --*/
 {
-    PRECORD_DATA recordData = &RecordList->LogRecord.Data;
+	UNREFERENCED_PARAMETER(Data);
+	UNREFERENCED_PARAMETER(RecordList);
+    //PRECORD_DATA recordData = &RecordList->LogRecord.Data;
 
     //recordData->Status = Data->IoStatus.Status;
     //recordData->Information = Data->IoStatus.Information;

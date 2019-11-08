@@ -162,6 +162,189 @@ Return Value:
     The thread successfully terminated
 
 --*/
+#ifdef __DLL_EXPORT__
+{
+    PLOG_CONTEXT context = (PLOG_CONTEXT)lpParameter;
+    DWORD bytesReturned = 0;
+    DWORD used;
+    PVOID alignedBuffer[BUFFER_SIZE/sizeof( PVOID )];
+    PCHAR buffer = (PCHAR) alignedBuffer;
+    HRESULT hResult;
+    PLOG_RECORD pLogRecord;
+    PRECORD_DATA pRecordData;
+    COMMAND_MESSAGE commandMessage;
+
+    //
+    //  Check to see if we should shut down.
+    //
+
+    if (context->CleaningUp) {
+
+        return 0;
+    }
+
+    //
+    //  Request log data from MiniSpy.
+    //
+
+    commandMessage.Command = GetMiniSpyLog;
+
+    hResult = FilterSendMessage( context->Port,
+                                    &commandMessage,
+                                    sizeof( COMMAND_MESSAGE ),
+                                    buffer,
+                                    sizeof(alignedBuffer),
+                                    &bytesReturned );
+
+    if (IS_ERROR( hResult )) {
+
+        if (HRESULT_FROM_WIN32( ERROR_INVALID_HANDLE ) == hResult) {
+
+            printf( "The kernel component of minispy has unloaded. Exiting\n" );
+            ExitProcess( 0 );
+        } else {
+
+            if (hResult != HRESULT_FROM_WIN32( ERROR_NO_MORE_ITEMS )) {
+
+                printf( "UNEXPECTED ERROR received: %x\n", hResult );
+            }
+
+            Sleep( POLL_INTERVAL );
+        }
+
+        return 0;
+    }
+
+    //
+    //  Buffer is filled with a series of LOG_RECORD structures, one
+    //  right after another.  Each LOG_RECORD says how long it is, so
+    //  we know where the next LOG_RECORD begins.
+    //
+
+    pLogRecord = (PLOG_RECORD) buffer;
+    used = 0;
+
+    //
+    //  Logic to write record to screen and/or file
+    //
+
+    for (;;) {
+
+        if (used+FIELD_OFFSET(LOG_RECORD,Name) > bytesReturned) {
+
+            break;
+        }
+
+        if (pLogRecord->Length < (sizeof(LOG_RECORD)+sizeof(WCHAR))) {
+
+            printf( "UNEXPECTED LOG_RECORD->Length: length=%d expected>=%d\n",
+                    pLogRecord->Length,
+                    (sizeof(LOG_RECORD)+sizeof(WCHAR)));
+
+            break;
+        }
+
+        used += pLogRecord->Length;
+
+        if (used > bytesReturned) {
+
+            printf( "UNEXPECTED LOG_RECORD size: used=%d bytesReturned=%d\n",
+                    used,
+                    bytesReturned);
+
+            break;
+        }
+
+        pRecordData = &pLogRecord->Data;
+
+        //
+        //  See if a reparse point entry
+        //
+
+        if (FlagOn(pLogRecord->RecordType,RECORD_TYPE_FILETAG)) {
+
+            if (!TranslateFileTag( pLogRecord )){
+
+                //
+                // If this is a reparse point that can't be interpreted, move on.
+                //
+
+                pLogRecord = (PLOG_RECORD)Add2Ptr(pLogRecord,pLogRecord->Length);
+                continue;
+            }
+        }
+
+        if (context->LogToScreen) {
+
+            ScreenDump( pLogRecord->SequenceNumber,
+                        pLogRecord->Name,
+                        pRecordData );
+        }
+
+        if (context->LogToFile) {
+
+            FileDump( pLogRecord->SequenceNumber,
+                        pLogRecord->Name,
+                        pRecordData,
+                        context->OutputFile );
+        }
+
+        //
+        //  The RecordType could also designate that we are out of memory
+        //  or hit our program defined memory limit, so check for these
+        //  cases.
+        //
+
+        if (FlagOn(pLogRecord->RecordType,RECORD_TYPE_FLAG_OUT_OF_MEMORY)) {
+
+            if (context->LogToScreen) {
+
+                printf( "M:  %08X System Out of Memory\n",
+                        pLogRecord->SequenceNumber );
+            }
+
+            if (context->LogToFile) {
+
+                fprintf( context->OutputFile,
+                            "M:\t0x%08X\tSystem Out of Memory\n",
+                            pLogRecord->SequenceNumber );
+            }
+
+        } else if (FlagOn(pLogRecord->RecordType,RECORD_TYPE_FLAG_EXCEED_MEMORY_ALLOWANCE)) {
+
+            if (context->LogToScreen) {
+
+                printf( "M:  %08X Exceeded Mamimum Allowed Memory Buffers\n",
+                        pLogRecord->SequenceNumber );
+            }
+
+            if (context->LogToFile) {
+
+                fprintf( context->OutputFile,
+                            "M:\t0x%08X\tExceeded Mamimum Allowed Memory Buffers\n",
+                            pLogRecord->SequenceNumber );
+            }
+        }
+
+        //
+        // Move to next LOG_RECORD
+        //
+
+        pLogRecord = (PLOG_RECORD)Add2Ptr(pLogRecord,pLogRecord->Length);
+    }
+
+    //
+    //  If we didn't get any data, pause for 1/2 second
+    //
+
+    if (bytesReturned == 0) {
+
+        Sleep( POLL_INTERVAL );
+    }
+
+    return 0;
+}
+#else
 {
     PLOG_CONTEXT context = (PLOG_CONTEXT)lpParameter;
     DWORD bytesReturned = 0;
@@ -356,6 +539,7 @@ Return Value:
     printf( "Log: All done\n" );
     return 0;
 }
+#endif __DLL_EXPORT__
 
 
 VOID
@@ -977,7 +1161,7 @@ WCHAR* DumpNameCxtLine(__in WCHAR* Name,  __inout WCHAR* line, __inout size_t *l
         *length = 0;
         return ptr;
     }
-    wcsncpy(line, Name, (ptr-Name));
+    wcsncpy_s(line, *length, Name, (ptr-Name));
     tmp = line;
     *(tmp + (ptr-Name)) = UNICODE_NULL;
     *length = (ptr-Name);

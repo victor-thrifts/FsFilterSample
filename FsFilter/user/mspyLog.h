@@ -19,11 +19,19 @@ Environment:
 #ifndef __MSPYLOG_H__
 #define __MSPYLOG_H__
 
+#pragma warning(disable: 4018)
+#pragma warning(disable: 4267)
+#pragma warning(disable: 4090)
+#pragma warning(disable: 4057)
+#define _CRT_SECURE_NO_WARNINGS
+
 #include <stdio.h>
 #include <fltUser.h>
 #include "minispy.h"
 
 #define BUFFER_SIZE     4096
+
+extern HANDLE gport;
 
 //
 //  Structure for managing current state.

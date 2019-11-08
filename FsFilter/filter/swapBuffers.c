@@ -527,7 +527,7 @@ Always succeed.
 /*************************************************************************
 Initialization and unload routines.
 *************************************************************************/
-
+DRIVER_INITIALIZE SwapDriverEntry;
 NTSTATUS
 SwapDriverEntry(
 __in PDRIVER_OBJECT DriverObject,
@@ -555,6 +555,9 @@ Status of the operation
 --*/
 {
 	NTSTATUS status = STATUS_SUCCESS;
+
+	UNREFERENCED_PARAMETER(DriverObject);
+	//UNREFERENCED_PARAMETER(Flags);
 
 	//
 	//  Get debug trace flags
@@ -606,7 +609,7 @@ Status of the operation
 
 #endif // __SWAP_BUFFERS_STANDALONE_C		
 
-SwapDriverEntryExit:
+//SwapDriverEntryExit:
 
 	if (!NT_SUCCESS(status)) {
 

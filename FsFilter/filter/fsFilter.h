@@ -10,7 +10,12 @@ PUNICODE_STRING GetProttectinFolder();
 
 VOID SetProtectionFolder(PUNICODE_STRING dir);
 
-//DRIVER_INITIALIZE DriverEntry;
+
+PUNICODE_STRING GetOpenProccess();
+
+VOID SetOpenProccess(PUNICODE_STRING proc);
+
+DRIVER_INITIALIZE DriverEntry;
 NTSTATUS
 DriverEntry (
     __in PDRIVER_OBJECT DriverObject,
@@ -55,13 +60,14 @@ PreOperation (
     __deref_out_opt PVOID *CompletionContext
     );
 
-VOID
-OperationStatusCallback (
-    __in PCFLT_RELATED_OBJECTS FltObjects,
-    __in PFLT_IO_PARAMETER_BLOCK ParameterSnapshot,
-    __in NTSTATUS OperationStatus,
-    __in PVOID RequesterContext
-    );
+
+//PFLT_GET_OPERATION_STATUS_CALLBACK PfltGetOperationStatusCallback;
+void PfltGetOperationStatusCallback(
+  __in PCFLT_RELATED_OBJECTS FltObjects,
+  __in PFLT_IO_PARAMETER_BLOCK IopbSnapshot,
+  __in NTSTATUS OperationStatus,
+  __in PVOID RequesterContext
+);
 
 FLT_POSTOP_CALLBACK_STATUS
 PostOperation (
@@ -117,7 +123,6 @@ ReadDriverParameters(
 
 VOID
 WriteDriverParameters(
-	__in PUNICODE_STRING RegistryPath
 );
 
 FLT_POSTOP_CALLBACK_STATUS

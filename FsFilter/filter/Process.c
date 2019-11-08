@@ -68,6 +68,7 @@ NTSTATUS GetCurrentProcessName()
     }else{
         DbgPrint("ZwQueryInformationProcess failed! \n");
     }
+	return status;
 }
 
 
@@ -76,7 +77,7 @@ NTSTATUS GetProcessImageName(HANDLE processId, PUNICODE_STRING ProcessImageName)
 	NTSTATUS status;
 	ULONG returnedLength;
 	ULONG bufferLength;
-	HANDLE hProcess;
+	HANDLE hProcess = NULL;
 	PEPROCESS eProcess;
 
 	PAGED_CODE(); // this eliminates the possibility of the IDLE Thread/Process
@@ -85,7 +86,7 @@ NTSTATUS GetProcessImageName(HANDLE processId, PUNICODE_STRING ProcessImageName)
 
 	if(NT_SUCCESS(status))
 	{
-		status = ObOpenObjectByPointer(eProcess,0, NULL, 0,0,KernelMode,&hProcess);
+		status = ObOpenObjectByPointer(eProcess, 0, NULL, 0, 0, KernelMode, &hProcess);
 		if(NT_SUCCESS(status))
 		{
 		} else {
@@ -150,6 +151,8 @@ NTSTATUS GetCurrentThreadImageName(PFLT_CALLBACK_DATA Data,  PUNICODE_STRING Pro
 	HANDLE hProcess;
 	UNICODE_STRING fullPath;
 
+	UNREFERENCED_PARAMETER(ProcessImageName);
+
 	objCurProcess=IoThreadToProcess(Data->Thread);//Note: Date is type of FLT_CALLBACK_DATA which is in PreOperation Callback as argument
 
 	hProcess=PsGetProcessId(objCurProcess);
@@ -163,4 +166,5 @@ NTSTATUS GetCurrentThreadImageName(PFLT_CALLBACK_DATA Data,  PUNICODE_STRING Pro
 	ExFreePoolWithTag(fullPath.Buffer, 'uUT1');
 	fullPath.Buffer = NULL;
 	fullPath.Length = 0;
+	return STATUS_SUCCESS;
 }

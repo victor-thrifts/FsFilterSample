@@ -38,7 +38,7 @@ Environment:
 //---------------------------------------------------------------------------
 //  Function prototypes
 //---------------------------------------------------------------------------
-//DRIVER_INITIALIZE DriverEntry;
+DRIVER_INITIALIZE SpyDriverEntry;
 NTSTATUS
 SpyDriverEntry (
     __in PDRIVER_OBJECT DriverObject,
