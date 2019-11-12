@@ -1,4 +1,4 @@
-/*++
+﻿/*++
 
 Copyright (c) 1989-2002  Microsoft Corporation
 
@@ -533,13 +533,29 @@ Return Value:
 
 --*/
 {
-	UNREFERENCED_PARAMETER(Data);
-	UNREFERENCED_PARAMETER(RecordList);
-    //PRECORD_DATA recordData = &RecordList->LogRecord.Data;
+	//UNREFERENCED_PARAMETER(Data);
+	//UNREFERENCED_PARAMETER(RecordList);
+    PRECORD_DATA recordData = &RecordList->LogRecord.Data;
 
     //recordData->Status = Data->IoStatus.Status;
     //recordData->Information = Data->IoStatus.Information;
     //KeQuerySystemTime( &recordData->CompletionTime );
+
+    if( Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformation )
+    {
+           RecordList->LogRecord.Data.Reserved[0] = 'D';
+    }
+    else if( Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileRenameInformation )
+    {
+        RecordList->LogRecord.Data.Reserved[0] = 'R';
+    }
+    else
+    {
+        if(recordData->CallbackMajorId == IRP_MJ_WRITE )
+        {
+            RecordList->LogRecord.Data.Reserved[0] = 'W';
+        }
+    }    
 }
 
 

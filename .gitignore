@@ -19,6 +19,7 @@ objchk_*/
 x64/
 x86/
 bld/
+out/
 [Bb]in/
 [Oo]bj/
 [Ll]og/

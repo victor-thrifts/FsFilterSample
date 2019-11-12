@@ -1,4 +1,4 @@
-#ifndef __FSFILTER_CONF_H
+ï»¿#ifndef __FSFILTER_CONF_H
 #define __FSFILTER_CONF_H
 
 #define MIN_SECTOR_SIZE 0x200
@@ -6,5 +6,5 @@
 
 #endif //__FSFILTER_CONF_H
 
-#pragma warning(disable:4702)    //ÎŞ·¨·ÃÎÊµÄ´úÂë
-#pragma warning(disable:4055)   //ÀàĞÍ×ª»»¡±: ´ÓÊı¾İÖ¸Õë µ½º¯ÊıÖ¸Õë 
+#pragma warning(disable:4702)    //æ— æ³•è®¿é—®çš„ä»£ç 
+#pragma warning(disable:4055)   //ç±»å‹è½¬æ¢â€: ä»æ•°æ®æŒ‡é’ˆ åˆ°å‡½æ•°æŒ‡é’ˆ 

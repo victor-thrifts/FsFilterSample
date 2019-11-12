@@ -1,4 +1,4 @@
-/*++
+﻿/*++
 
 Copyright (c) 1989-2002  Microsoft Corporation
 
@@ -107,6 +107,7 @@ Return Value:
     }
 
     pLogRecord = (PLOG_RECORD) alignedBuffer;
+    pLogRecord->RecordType = RECORD_TYPE_NORMAL;
 
     if( pLogRecord->Reserved == -1 ) return (DWORD)-1;   //failed execute the command.
 
@@ -127,7 +128,7 @@ Return Value:
     //
     //  See if a reparse point entry
     //
-
+    
     if (FlagOn(pLogRecord->RecordType,RECORD_TYPE_FILETAG)) {
 
         if (!TranslateFileTag( pLogRecord )){

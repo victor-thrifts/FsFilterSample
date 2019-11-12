@@ -1,4 +1,4 @@
-#ifndef __MSPROCESS_H__
+﻿#ifndef __MSPROCESS_H__
 #define __MSPROCESS_H__
 
 /*************************************************************************

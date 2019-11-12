@@ -1,4 +1,4 @@
-/*++
+﻿/*++
 
 Copyright (c) 1989-2002  Microsoft Corporation
 
@@ -1064,7 +1064,7 @@ Return Value:
     //UNICODE_STRING defaultName;
     PUNICODE_STRING nameToUse;
     NTSTATUS status;
-
+ 
     //
     //  We got a log record, if there is a file object, get its name.
     //
@@ -1129,7 +1129,7 @@ Return Value:
     //
 
     recordList = SpyNewRecord();
-
+    
     if (recordList) {
 
         //

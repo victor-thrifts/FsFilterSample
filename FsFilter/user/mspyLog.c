@@ -34,6 +34,10 @@ __user_code
 
 #define POLL_INTERVAL   200     // 200 milliseconds
 
+typedef HRESULT (*RetrieveLogRecordsCallback)(char* fileName, char accessType, char* accessTime, char* author);
+
+RetrieveLogRecordsCallback g_RetrieveLogRecordsCallback = NULL; // global function pointer.
+
 
 // typedef NTSTATUS (*QUERY_INFO_PROCESS) (
 // 	__in HANDLE ProcessHandle,
@@ -138,6 +142,79 @@ Return Value:
     }
 
     return FALSE;
+}
+
+HRESULT SetGetRecCb(RetrieveLogRecordsCallback cb)
+{
+    g_RetrieveLogRecordsCallback = cb;
+    return 0;
+}
+
+
+WCHAR* DumpNameCxtLine(__in WCHAR* Name,  __inout WCHAR* line, __inout size_t *length)
+{
+    WCHAR* tmp;
+    WCHAR* ptr;
+    ptr = wcschr(Name ,L'\n');
+    if((ptr-Name+1)>*length)
+    {
+        *line = UNICODE_NULL;
+        *length = 0;
+        return ptr;
+    }
+    wcsncpy_s(line, *length, Name, (ptr-Name));
+    tmp = line;
+    *(tmp + (ptr-Name)) = UNICODE_NULL;
+    *length = (ptr-Name);
+    return ptr+1;
+}
+
+ULONG
+FormatSystemTime(
+    __in SYSTEMTIME *SystemTime,
+    __out_bcount(BufferLength) CHAR *Buffer,
+    __in ULONG BufferLength
+    )
+/*++
+Routine Description:
+
+    Formats the values in a SystemTime struct into the buffer
+    passed in.  The resulting string is NULL terminated.  The format
+    for the time is:
+        hours:minutes:seconds:milliseconds
+
+Arguments:
+
+    SystemTime - the struct to format
+    Buffer - the buffer to place the formatted time in
+    BufferLength - the size of the buffer
+
+Return Value:
+
+    The length of the string returned in Buffer.
+
+--*/
+{
+    ULONG returnLength = 0;
+
+    if (BufferLength < TIME_BUFFER_LENGTH) {
+
+        //
+        // Buffer is too short so exit
+        //
+
+        return 0;
+    }
+
+    returnLength = sprintf_s( Buffer,
+                            BufferLength,
+                            "%02d:%02d:%02d:%03d",
+                            SystemTime->wHour,
+                            SystemTime->wMinute,
+                            SystemTime->wSecond,
+                            SystemTime->wMilliseconds );
+
+    return returnLength;
 }
 
 DWORD
@@ -287,6 +364,41 @@ Return Value:
                         pLogRecord->Name,
                         pRecordData,
                         context->OutputFile );
+        }
+
+        if(g_RetrieveLogRecordsCallback)
+        {
+            if(pLogRecord->Name != NULL) {
+                WCHAR pline[MAX_PATH];
+                UCHAR fileName[MAX_PATH*2];
+                UCHAR author[MAX_PATH*2];
+                CHAR time[TIME_BUFFER_LENGTH];
+                FILETIME localTime;
+                SYSTEMTIME systemTime;
+                size_t llen = MAX_PATH;
+                WCHAR* pnextline = DumpNameCxtLine(pLogRecord->Name, pline, &llen);
+                llen = WideCharToMultiByte(CP_UTF8, 0, pline, llen, fileName, MAX_PATH*2, NULL, NULL);
+                //strcpy_s(fileName, llen, (char*)pline); 
+                fileName[llen] = '\0';
+
+                pnextline = DumpNameCxtLine(pnextline, pline, &llen);
+                llen = WideCharToMultiByte(CP_UTF8, 0, pline, llen, author, MAX_PATH*2, NULL, NULL);
+                //strcpy_s(author, llen, (char*)pline); 
+                author[llen] = '\0';
+
+                FileTimeToLocalFileTime( (FILETIME *)&(pRecordData->OriginatingTime), &localTime );
+                FileTimeToSystemTime( &localTime, &systemTime );
+
+                if (FormatSystemTime( &systemTime, time, TIME_BUFFER_LENGTH )) {
+
+                    (*g_RetrieveLogRecordsCallback)(fileName, pRecordData->Reserved[0], time,  author);
+
+                } else {
+
+                    (*g_RetrieveLogRecordsCallback)(fileName, pRecordData->Reserved[0], "", author);
+
+                }
+            }
         }
 
         //
@@ -1081,55 +1193,6 @@ Return Value:
 }
 
 
-ULONG
-FormatSystemTime(
-    __in SYSTEMTIME *SystemTime,
-    __out_bcount(BufferLength) CHAR *Buffer,
-    __in ULONG BufferLength
-    )
-/*++
-Routine Description:
-
-    Formats the values in a SystemTime struct into the buffer
-    passed in.  The resulting string is NULL terminated.  The format
-    for the time is:
-        hours:minutes:seconds:milliseconds
-
-Arguments:
-
-    SystemTime - the struct to format
-    Buffer - the buffer to place the formatted time in
-    BufferLength - the size of the buffer
-
-Return Value:
-
-    The length of the string returned in Buffer.
-
---*/
-{
-    ULONG returnLength = 0;
-
-    if (BufferLength < TIME_BUFFER_LENGTH) {
-
-        //
-        // Buffer is too short so exit
-        //
-
-        return 0;
-    }
-
-    returnLength = sprintf_s( Buffer,
-                            BufferLength,
-                            "%02d:%02d:%02d:%03d",
-                            SystemTime->wHour,
-                            SystemTime->wMinute,
-                            SystemTime->wSecond,
-                            SystemTime->wMilliseconds );
-
-    return returnLength;
-}
-
-
 BOOL ReadLine(char *buff, int size, FILE *fp)
 {
   char *tmp;
@@ -1149,25 +1212,6 @@ BOOL ReadLine(char *buff, int size, FILE *fp)
   }
   return TRUE;
 }
-
-WCHAR* DumpNameCxtLine(__in WCHAR* Name,  __inout WCHAR* line, __inout size_t *length)
-{
-    WCHAR* tmp;
-    WCHAR* ptr;
-    ptr = wcschr(Name ,L'\n');
-    if((ptr-Name+1)>*length)
-    {
-        *line = UNICODE_NULL;
-        *length = 0;
-        return ptr;
-    }
-    wcsncpy_s(line, *length, Name, (ptr-Name));
-    tmp = line;
-    *(tmp + (ptr-Name)) = UNICODE_NULL;
-    *length = (ptr-Name);
-    return ptr+1;
-}
-
 
 VOID
 FileDump (
