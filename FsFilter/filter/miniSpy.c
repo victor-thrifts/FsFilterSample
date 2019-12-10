@@ -58,7 +58,7 @@ extern PFLT_FILTER gFilterHandle;
 //  Memory allocation tag
 //
 
-#define SPY_TAG 'ypSM'
+#define SPY_TAG		'ypSM'
 
 
 #define SetFlagInterlocked(_ptrFlags,_flagToSet) \
@@ -1137,6 +1137,7 @@ Return Value:
         //
 
         SpySetRecordName( &(recordList->LogRecord), nameToUse );
+
 
         //
         //  Release the name information structure (if defined)

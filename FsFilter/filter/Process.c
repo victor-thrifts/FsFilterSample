@@ -168,3 +168,194 @@ NTSTATUS GetCurrentThreadImageName(PFLT_CALLBACK_DATA Data,  PUNICODE_STRING Pro
 	fullPath.Length = 0;
 	return STATUS_SUCCESS;
 }
+
+
+UNICODE_STRING *GetProcessUsername()
+{
+	HANDLE token;
+	TOKEN_USER* TokenUser = NULL;
+	NTSTATUS status;
+	//PULONG len;
+	//int index;
+	//SID *sid;
+	LUID luid;
+	UNICODE_STRING userName;
+	PSecurityUserData userInformation = NULL;
+	status = ZwOpenProcessTokenEx(NtCurrentProcess(), GENERIC_READ, OBJ_KERNEL_HANDLE, &token);
+	//ZwQueryInformationToken(token, (TOKEN_INFORMATION_CLASS)TokenUser, NULL, 0, &len); //to get required length
+	if (!NT_SUCCESS(status))
+	{
+		KdPrint(("ZwOpenProcessTokenEx(): ZwOpenProcessTokenEx fail\n"));
+		return NULL;
+	}
+
+	//sid= (SID*)TokenUser->User.Sid;
+	// 
+
+	status = SeQueryAuthenticationIdToken(token, &luid);
+	if (!NT_SUCCESS(status))
+	{
+		KdPrint(("SeQueryAuthenticationIdToken(): SeQueryAuthenticationIdToken fail\n"));
+		ZwClose(token);
+		return NULL;
+	}
+	ZwClose(token);
+	status = STATUS_UNSUCCESSFUL;
+	// status = GetSecurityUserInfo(&luid, UNDERSTANDS_LONG_NAMES, &userInformation);   //seckedd.dll required
+	if (!NT_SUCCESS(status))
+	{
+		KdPrint(("GetSecurityUserInfo(): GetSecurityUserInfo fail\n"));
+		return NULL;
+	}
+	userName.Length = 0;
+	userName.MaximumLength = userInformation->UserName.Length;
+	userName.Buffer = ExAllocatePool(NonPagedPool, userName.MaximumLength);
+	if (userName.Buffer == NULL)
+	{
+		KdPrint(("GetUserName(): ExAllocatePool fail\n"));
+		return NULL;
+	}
+
+	RtlCopyUnicodeString(&userName, &userInformation->UserName);
+	return &userName;
+}
+
+
+NTSTATUS GetSID(PUNICODE_STRING sidString, PACCESS_STATE AccessState)
+{
+	NTSTATUS ntStatus;
+	PVOID Token;
+	HANDLE tokenHandle;
+	PTOKEN_USER tokenInfoBuffer;
+	ULONG requiredLength;
+	PWCHAR sidStringBuffer;
+	UNICODE_STRING nameString;
+	UNICODE_STRING domainString;
+	WCHAR* nameBuffer;
+	WCHAR* domainBuffer;
+	SID_NAME_USE nameUse = SidTypeUser;
+	ULONG nameSize = 0;
+	ULONG domainSize = 0;
+	ULONG SIDLength;
+	TOKEN_USER tokenuser;
+	SID_AND_ATTRIBUTES tokenuser_user = { 0 };
+	WCHAR sid[512] = { 0 };
+	tokenuser.User = tokenuser_user;
+	tokenuser_user.Sid = sid;
+
+	sidStringBuffer = ExAllocatePool(NonPagedPool, 128);
+	RtlInitEmptyUnicodeString(sidString, sidStringBuffer, 128);
+
+	Token = PsReferencePrimaryToken(PsGetCurrentProcess());
+
+	ntStatus = ObOpenObjectByPointer(
+		Token,
+		OBJ_KERNEL_HANDLE,
+		AccessState,
+		TOKEN_QUERY,
+		NULL,
+		KernelMode,
+		&tokenHandle);
+
+	ObDereferenceObject(Token);
+	if (!NT_SUCCESS(ntStatus)) {
+		//KdPrint(("\nGetSID: Could not open process token: %x\n", ntStatus ));
+		return STATUS_FAIL_CHECK;
+	}
+
+	//
+	// Pull out the SID
+	//
+
+	ntStatus = ZwQueryInformationToken(
+		tokenHandle,
+		TokenUser,
+		NULL,
+		0,
+		&requiredLength);
+
+	if (ntStatus != STATUS_BUFFER_TOO_SMALL) {
+
+		KdPrint(("\nGetSID: Error getting token information: %x\n", ntStatus));
+		ZwClose(tokenHandle);
+		return STATUS_FAIL_CHECK;
+	}
+
+	tokenInfoBuffer = (PTOKEN_USER)ExAllocatePool(NonPagedPool, requiredLength);
+	if (tokenInfoBuffer) {
+		ntStatus = ZwQueryInformationToken(
+			tokenHandle,
+			TokenUser,
+			tokenInfoBuffer,
+			requiredLength,
+			&requiredLength);
+	}
+
+	if (!NT_SUCCESS(ntStatus) || !tokenInfoBuffer) {
+		KdPrint(("\nGetSID: Error getting token information: %x\n", ntStatus));
+		if (tokenInfoBuffer) ExFreePool(tokenInfoBuffer);
+		ZwClose(tokenHandle);
+		return STATUS_FAIL_CHECK;
+	}
+
+	ZwClose(tokenHandle);
+
+
+	//
+	// Got it, now convert to text representation
+	//
+	ntStatus = RtlConvertSidToUnicodeString(sidString, tokenInfoBuffer->User.Sid, FALSE);
+	sidString->Buffer[sidString->Length + 1] = '\0';
+	KdPrint(("\nGetSID: sidString = %ws\n", sidString->Buffer));
+
+	SIDLength = RtlLengthSid(tokenInfoBuffer->User.Sid);
+	if (FALSE == RtlValidSid(tokenInfoBuffer->User.Sid)) return STATUS_FAIL_CHECK;
+
+	//ntStatus = SecLookupAccountSid(
+	//	tokenInfoBuffer-> User.Sid,
+	//	&nameSize,	//PULONG          NameSize,
+	//	&nameString, //PUNICODE_STRING NameBuffer,
+	//	&domainSize, //PULONG          DomainSize,
+	//	&domainString,//PUNICODE_STRING DomainBuffer,
+	//	&nameUse 	//PSID_NAME_USE   NameUse
+	//);
+
+	//if (nameUse != SidTypeUser) return STATUS_FAIL_CHECK;
+
+	//if(ntStatus == STATUS_BUFFER_TOO_SMALL){
+	//	//
+	//	KdPrint(("\nGetSID: Unable to convert SID to Name: %x\n", ntStatus ));
+	//	nameBuffer = ExAllocatePool(NonPagedPool, nameSize*2);
+	//	domainBuffer = ExAllocatePool(NonPagedPool, domainSize*2);
+	//	RtlInitEmptyUnicodeString(&nameString, nameBuffer, nameSize*2);
+	//	RtlInitEmptyUnicodeString(&domainString, domainBuffer, domainSize*2);
+
+	//	ntStatus = SecLookupAccountSid(
+	//		tokenInfoBuffer->User.Sid,
+	//		&nameSize,	//PULONG          NameSize,
+	//		&nameString, //PUNICODE_STRING NameBuffer,
+	//		&domainSize, //PULONG          DomainSize,
+	//		&domainString,//PUNICODE_STRING DomainBuffer,
+	//		&nameUse 	//PSID_NAME_USE   NameUse
+	//		);
+	//	
+	//	if (!NT_SUCCESS(ntStatus)){
+	//		KdPrint(("\nGetSID: Unable to convert SID to Name: %x\n", ntStatus));
+	//		ExFreePool(nameBuffer);
+	//		ExFreePool(domainBuffer);
+	//	}
+	//}
+
+	//if(NT_SUCCESS( ntStatus )){
+	//	KdPrint(("\nGetSID: Unable to convert SID to Name: %x\n", ntStatus ));
+	//	ExFreePool(nameBuffer);
+	//	ExFreePool(domainBuffer);
+	//}
+
+	ExFreePool(tokenInfoBuffer);
+	if (!NT_SUCCESS(ntStatus)) {
+		KdPrint(("\nGetSID: Unable to convert SID to text: %x\n", ntStatus));
+		return STATUS_FAIL_CHECK;
+	}
+	return STATUS_SUCCESS;
+}

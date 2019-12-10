@@ -77,6 +77,8 @@ Pool Tags
 
 #define CONTEXT_TAG         'cBS_'
 #define PRE_2_POST_TAG      'pBS_'
+#define FLD_TAG      		'dlf_'
+#define EXE_TAG				'exe_'
 #define P_DIR_TAG			'RID_'
 #define P_PRC_TAG			'CRP_'
 #define REG_TAG				'GER_'
@@ -133,11 +135,27 @@ typedef struct _PRE_2_POST_CONTEXT {
 
 } PRE_2_POST_CONTEXT, *PPRE_2_POST_CONTEXT;
 
+
+
+typedef struct _FF_LIST_CONTEXT FF_LIST_CONTEXT, *PFF_LIST_CONTEXT;
+struct _FF_LIST_CONTEXT {
+	//
+	FF_LIST_CONTEXT* head;
+	UNICODE_STRING item;
+};
+
+PFF_LIST_CONTEXT ff_exe_list = NULL;
+PFF_LIST_CONTEXT ff_fld_list = NULL;
+
+#define MAX_FF_LIST_SIZE 128
+
 //
 //  This is a lookAside list used to allocate our pre-2-post structure.
 //
 
 NPAGED_LOOKASIDE_LIST Pre2PostContextList;
+NPAGED_LOOKASIDE_LIST FolderContextList;
+NPAGED_LOOKASIDE_LIST ExeContextList;
 
 //
 //  operation registration
@@ -841,6 +859,24 @@ Return Value:
 	//  callback.
 	//
 	ExInitializeNPagedLookasideList(&Pre2PostContextList, NULL, NULL, 0, sizeof(PRE_2_POST_CONTEXT), PRE_2_POST_TAG, 0);
+
+	ExInitializeNPagedLookasideList(
+		&ExeContextList, 
+		NULL, 
+		NULL, 
+		0, 
+		MAX_FF_LIST_SIZE, 
+		EXE_TAG, 0);
+	
+	ExInitializeNPagedLookasideList(
+		&FolderContextList, 
+		NULL, 
+		NULL, 
+		0, 
+		MAX_FF_LIST_SIZE, 
+		FLD_TAG, 0);
+
+
 	DbgPrint("Compile Date:%s\nCompile Time:%s\nEnter DriverEntry!\n", __DATE__, __TIME__);
 
     //
@@ -889,6 +925,7 @@ Return Value:
 
 --*/
 {
+	PFF_LIST_CONTEXT tmp = NULL;
 	//UNICODE_STRING valueName;
 	//OBJECT_ATTRIBUTES attributes;
 	// HANDLE driverRegKey;
@@ -906,9 +943,23 @@ Return Value:
 	//  Unregister from FLT mgr
 	FltUnregisterFilter(gFilterHandle);
 
+	while(ff_fld_list){
+		tmp = ff_fld_list->head;
+		ExFreeToNPagedLookasideList(&FolderContextList, ff_fld_list);
+		ff_fld_list = tmp;	
+	}
+
+
+	while(ff_exe_list){
+		tmp = ff_exe_list->head;
+		ExFreeToNPagedLookasideList(&ExeContextList, ff_exe_list);
+		ff_exe_list = tmp;
+	}
 
 	//  Delete lookaside list
 	ExDeleteNPagedLookasideList(&Pre2PostContextList);
+	ExDeleteNPagedLookasideList(&ExeContextList);
+	ExDeleteNPagedLookasideList(&FolderContextList);
 
 	//Gobal values deletting.
 	WriteDriverParameters();
@@ -1317,6 +1368,7 @@ BOOLEAN IsOpenProccess()
 	BOOLEAN ret = FALSE;
 	FILE_ID ProcessId;
 	PUNICODE_STRING ProcessImageName;
+	PUNICODE_STRING sidString;
 	WCHAR strBuffer[(sizeof(UNICODE_STRING) + MAX_PATH*2)/sizeof(WCHAR)];
 
     ProcessId  = (FILE_ID)PsGetCurrentProcessId();
@@ -1330,6 +1382,7 @@ BOOLEAN IsOpenProccess()
 	// 判断
 	if (TRUE == FsRtlIsNameInExpression(&openProccess, ProcessImageName, FALSE, NULL))
 	{
+		//GetProcessUsername();
 		ret = TRUE;
 	}
 
@@ -1740,6 +1793,20 @@ PreCreate(
 	ULONG Position;
 	PFLT_FILE_NAME_INFORMATION NameInfo;
 
+
+	//PACCESS_STATE AccessState;
+	//WCHAR* sidbuf;
+	//UNICODE_STRING sidString;
+
+	//AccessState = Data->Iopb->Parameters.Create.SecurityContext->AccessState;
+	//sidbuf = ExAllocatePool(NonPagedPool, 128);
+	//RtlInitUnicodeString(&sidString, sidbuf);
+
+	//GetSID(&sidString, AccessState);
+
+	//ExFreePool(sidString.Buffer);
+
+
 	UNREFERENCED_PARAMETER(CompletionContext);
 	UNREFERENCED_PARAMETER(FltObjects);
 
@@ -2043,6 +2110,57 @@ PUNICODE_STRING GetOpenProccess()
 	return &openProccess;
 }
 
+WCHAR* DumpNameCxtLine(__in WCHAR* Name,  __inout WCHAR* line, __inout size_t *length)
+{
+    WCHAR* tmp;
+    WCHAR* ptr;
+    ptr = wcschr(Name ,L'\n');
+	if (!ptr){
+		*length = wcslen(Name);
+		RtlCopyMemory(line, Name, *length);
+		line[*length] = UNICODE_NULL;
+		return NULL;
+	}
+    if((ptr-Name)*2>*length)
+    {
+		RtlCopyMemory(line, Name, *length - 1);
+    }else{
+		RtlCopyMemory(line, Name, (ptr - Name)*2);
+    }
+    tmp = line;
+    *(tmp + (ptr-Name)) = UNICODE_NULL;
+    *length = (ptr-Name);
+    return ptr+1;
+}
+
+ParseOpenProcess(PUNICODE_STRING openprocess)
+{
+	size_t llen;
+	WCHAR pline[MAX_PATH];
+	PFF_LIST_CONTEXT newBuffer, tmp;
+	WCHAR* pnextline = openprocess->Buffer;
+	do{
+		llen = MAX_PATH;
+		pnextline = DumpNameCxtLine(pnextline, pline, &llen);
+		if(!pnextline) return;
+		newBuffer = (PFF_LIST_CONTEXT)ExAllocateFromNPagedLookasideList(&ExeContextList);
+		newBuffer->item.Buffer = (char*)newBuffer + FIELD_OFFSET(FF_LIST_CONTEXT, item.Buffer) + sizeof(PVOID);
+		newBuffer->item.MaximumLength = MAX_FF_LIST_SIZE - sizeof(FF_LIST_CONTEXT) - sizeof(PVOID);
+		ASSERT(llen*2 < 104);
+		newBuffer->item.Length = llen * 2;
+		RtlCopyMemory(newBuffer->item.Buffer, pline, llen*2);
+		newBuffer->item.Buffer[llen] = UNICODE_NULL;
+
+		tmp = ff_exe_list;
+		ff_exe_list = newBuffer;
+		newBuffer->head = tmp;
+
+	} while (pnextline);
+	
+	//ExeContextList.L.ListEntry.Blink
+	return;
+}
+
 VOID SetOpenProccess(PUNICODE_STRING proc)
 {
 	WCHAR* buffer;
@@ -2063,6 +2181,11 @@ VOID SetOpenProccess(PUNICODE_STRING proc)
 	//RtlCopyUnicodeString(&openProccess, proc);
 	RtlInitUnicodeString(&openProccess, --buffer);
 	KdPrint(("!openProccess is setting to : %wZ", openProccess));
+
+	{
+		UNICODE_STRING test = RTL_CONSTANT_STRING(L"test1\r\ntest2\r\n\test3");
+		ParseOpenProcess(&test);
+	}
 	return;
 }
 

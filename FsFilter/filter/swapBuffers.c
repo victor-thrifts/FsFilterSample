@@ -42,11 +42,6 @@ Pool Tags
 Local structures
 *************************************************************************/
 
-//
-//  This is a volume context, one of these are attached to each volume
-//  we monitor.  This is used to get a "DOS" name for debug display.
-//
-
 typedef struct _VOLUME_CONTEXT {
 
 	//
@@ -63,10 +58,6 @@ typedef struct _VOLUME_CONTEXT {
 
 } VOLUME_CONTEXT, *PVOLUME_CONTEXT;
 
-//
-//  This is a context structure that is used to pass state from our
-//  pre-operation callback to our post-operation callback.
-//
 
 typedef struct _PRE_2_POST_CONTEXT {
 	//
@@ -76,8 +67,6 @@ typedef struct _PRE_2_POST_CONTEXT {
 	//  to release contexts at DPC level.
 	//
 	PVOLUME_CONTEXT VolCtx;
-
-	//PSTREAM_CONTEXT pStreamCtx;
 
 	//
 	//  Since the post-operation parameters always receive the "original"
