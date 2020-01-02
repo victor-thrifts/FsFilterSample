@@ -99,6 +99,8 @@ mainprocess()
         printf( "Could not create semaphore: %d\n", result );
     }
 
+    ListDevices();
+
     return 0;
 }
 

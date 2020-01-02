@@ -399,7 +399,7 @@ Return Value:
             do{
                 *((PWCHAR) copyPointer) = L' ';
                 i += sizeof(UNICODE_NULL);
-                copyPointer += i;
+				copyPointer += sizeof(UNICODE_NULL);
             } while ((i+nameCopyLength) < ROUND_TO_SIZE(nameCopyLength, sizeof(PVOID)));
             LogRecord->Length += ROUND_TO_SIZE(nameCopyLength, sizeof(PVOID));
             *((PWCHAR)copyPointer) = UNICODE_NULL;
@@ -571,10 +571,20 @@ Return Value:
     //recordData->Status = Data->IoStatus.Status;
     //recordData->Information = Data->IoStatus.Information;
     //KeQuerySystemTime( &recordData->CompletionTime );
-
-    if( Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformation )
+	if (Data->Iopb->Parameters.Create.Options & FILE_DELETE_ON_CLOSE)
+	{
+		RecordList->LogRecord.Data.Reserved[0] = 'D';
+	}
+    else if( Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformation )
     {
-           RecordList->LogRecord.Data.Reserved[0] = 'D';
+		if (Data->IoStatus.Information & FILE_DOES_NOT_EXIST)
+		{
+			RecordList->LogRecord.Data.Reserved[0] = 'D';
+		}
+		else
+		{
+			RecordList->LogRecord.Data.Reserved[0] = 'd';
+		}
     }
     else if( Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileRenameInformation )
     {

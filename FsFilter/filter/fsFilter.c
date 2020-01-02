@@ -33,6 +33,7 @@ Environment:
 
 #include <wchar.h>
 
+
 #pragma prefast(disable:__WARNING_ENCODE_MEMBER_FUNCTION_POINTER, "Not valid for kernel mode drivers")
 
 
@@ -50,6 +51,8 @@ Environment:
 #pragma alloc_text(PAGE, InstanceSetup)
 #pragma alloc_text(PAGE, InstanceTeardownStart)
 #pragma alloc_text(PAGE, InstanceTeardownComplete)
+#pragma alloc_text(PAGE, IsOpenProccess)
+#pragma alloc_text(PAGE, IsProtectionFileByProtectedDirName)
 #endif
 
 
@@ -145,9 +148,13 @@ struct _FF_LIST_CONTEXT {
 };
 
 PFF_LIST_CONTEXT ff_exe_list = NULL;
+KSPIN_LOCK ff_exe_list_Lock;
 PFF_LIST_CONTEXT ff_fld_list = NULL;
+KSPIN_LOCK ff_fld_list_Lock;
 
-#define MAX_FF_LIST_SIZE 128
+IsInSetting = FALSE;
+
+#define MAX_FF_LIST_SIZE 512
 
 //
 //  This is a lookAside list used to allocate our pre-2-post structure.
@@ -415,6 +422,124 @@ CONST FLT_REGISTRATION FilterRegistration = {
 //////////////////////////////////////////////////////////////////////
 
 
+
+WCHAR* DumpNameCxtLine(__in WCHAR* Name,  __inout WCHAR* line, __inout size_t *length)
+{
+    WCHAR* tmp;
+    WCHAR* ptr;
+    ptr = wcschr(Name ,L'\n');
+	if (!ptr){
+		*length = wcslen(Name);
+		RtlCopyMemory(line, Name, *length*2);
+		line[*length] = UNICODE_NULL;
+		return NULL;
+	}
+    if((ptr-Name)*2>*length)
+    {
+		RtlCopyMemory(line, Name, *length - 1);
+    }else{
+		RtlCopyMemory(line, Name, (ptr - Name)*2);
+    }
+    tmp = line;
+    *(tmp + (ptr-Name)) = UNICODE_NULL;
+    *length = (ptr-Name);
+    return ptr+1;
+}
+
+ParseOpenProcess(PUNICODE_STRING openprocess)
+{
+	size_t llen;
+	WCHAR pline[MAX_PATH];
+	PFF_LIST_CONTEXT newBuffer, tmp;
+	WCHAR* pnextline = openprocess->Buffer;
+	KIRQL oldIrql;
+
+	KeAcquireSpinLock(&ff_exe_list_Lock, &oldIrql);
+
+	do{
+		llen = MAX_PATH;
+		pnextline = DumpNameCxtLine(pnextline, pline, &llen);
+		if (!pline) 
+		{
+			KeReleaseSpinLock(&ff_exe_list_Lock, oldIrql);
+			return;
+		}
+		if (wcslen(pline) < 2) 
+		{
+			KeReleaseSpinLock(&ff_exe_list_Lock, oldIrql);
+			return;
+		}
+		newBuffer = (PFF_LIST_CONTEXT)ExAllocateFromNPagedLookasideList(&ExeContextList);
+		newBuffer->item.Buffer = (char*)newBuffer + FIELD_OFFSET(FF_LIST_CONTEXT, item.Buffer) + sizeof(PVOID);
+		newBuffer->item.MaximumLength = MAX_FF_LIST_SIZE - sizeof(FF_LIST_CONTEXT) - sizeof(PVOID);
+		ASSERT(llen * 2 < newBuffer->item.MaximumLength - 3);
+		newBuffer->item.Length = (llen+1) * 2;
+		newBuffer->item.Buffer[0] = L'*';
+		RtlCopyMemory(++(newBuffer->item.Buffer), pline, llen*2);
+		newBuffer->item.Buffer[newBuffer->item.Length] = UNICODE_NULL;
+		newBuffer->item.Buffer--;
+
+		tmp = ff_exe_list;
+		ff_exe_list = newBuffer;
+		newBuffer->head = tmp;
+		if(!pnextline) 
+		{
+			KeReleaseSpinLock(&ff_exe_list_Lock, oldIrql);
+			return;
+		}
+	} while (pnextline);
+	
+	KeReleaseSpinLock(&ff_exe_list_Lock, oldIrql);
+	return;
+}
+
+
+ParseProtectionDir(PUNICODE_STRING dirs){
+	size_t llen;
+	KIRQL oldIrql;
+	WCHAR pline[MAX_PATH];
+	PFF_LIST_CONTEXT newBuffer, tmp;
+	WCHAR* pnextline = dirs->Buffer;
+
+	KeAcquireSpinLock(&ff_fld_list_Lock, &oldIrql);
+
+	do{
+		llen = MAX_PATH;
+		pnextline = DumpNameCxtLine(pnextline, pline, &llen);
+		if (!pline)
+		{
+			KeReleaseSpinLock(&ff_exe_list_Lock, oldIrql);
+			return;
+		}
+		if (wcslen(pline) < 2)
+		{
+			KeReleaseSpinLock(&ff_exe_list_Lock, oldIrql);
+			return;
+		}
+		newBuffer = (PFF_LIST_CONTEXT)ExAllocateFromNPagedLookasideList(&ExeContextList);
+		newBuffer->item.Buffer = (char*)newBuffer + FIELD_OFFSET(FF_LIST_CONTEXT, item.Buffer) + sizeof(PVOID);
+		newBuffer->item.MaximumLength = MAX_FF_LIST_SIZE - sizeof(FF_LIST_CONTEXT) - sizeof(PVOID);
+		ASSERT(llen * 2 < newBuffer->item.MaximumLength-1);
+		newBuffer->item.Length = llen * 2;
+		RtlCopyMemory(newBuffer->item.Buffer, pline, llen * 2);
+		newBuffer->item.Buffer[newBuffer->item.Length] = UNICODE_NULL;
+
+		tmp = ff_fld_list;
+		ff_fld_list = newBuffer;
+		newBuffer->head = tmp;
+		if (!pnextline) 
+		{
+			KeReleaseSpinLock(&ff_fld_list_Lock, oldIrql);
+			return;
+		}
+	} while (pnextline);
+
+	KeReleaseSpinLock(&ff_fld_list_Lock, oldIrql);
+
+	return;
+}
+
+
 VOID
 ReadDriverParameters(
 	__in PUNICODE_STRING RegistryPath
@@ -592,6 +717,9 @@ None.
 	registryPath.Length = RegistryPath->Length;
 
 	ZwClose(driverRegKey);
+
+	ParseOpenProcess(&openProccess);
+	ParseProtectionDir(&ProtectedDirName);
 	
 	return;
 }
@@ -841,8 +969,39 @@ Return Value:
     NTSTATUS status;
 
 	//
+	//  Init lookaside list used to allocate our context structure used to
+	//  pass information from out preOperation callback to our postOperation
+	//  callback.
+	//
+	ExInitializeNPagedLookasideList(&Pre2PostContextList, NULL, NULL, 0, sizeof(PRE_2_POST_CONTEXT), PRE_2_POST_TAG, 0);
+
+
+
+
+	DbgPrint("Compile Date:%s\nCompile Time:%s\nEnter DriverEntry!\n", __DATE__, __TIME__);
+	ExInitializeNPagedLookasideList(
+		&ExeContextList,
+		NULL,
+		NULL,
+		0,
+		MAX_FF_LIST_SIZE,
+		EXE_TAG, 0);
+
+	ExInitializeNPagedLookasideList(
+		&FolderContextList,
+		NULL,
+		NULL,
+		0,
+		MAX_FF_LIST_SIZE,
+		FLD_TAG, 0);
+
+	KeInitializeSpinLock(&ff_exe_list_Lock);
+	KeInitializeSpinLock(&ff_fld_list_Lock);
+
+	//
 	//  Get debug trace flags
 	//
+
 
 	ReadDriverParameters(RegistryPath);
 
@@ -852,32 +1011,6 @@ Return Value:
 
     PT_DBG_PRINT( PTDBG_TRACE_ROUTINES,
                   ("!DriverEntry: Entered\n") );
-
-	//
-	//  Init lookaside list used to allocate our context structure used to
-	//  pass information from out preOperation callback to our postOperation
-	//  callback.
-	//
-	ExInitializeNPagedLookasideList(&Pre2PostContextList, NULL, NULL, 0, sizeof(PRE_2_POST_CONTEXT), PRE_2_POST_TAG, 0);
-
-	ExInitializeNPagedLookasideList(
-		&ExeContextList, 
-		NULL, 
-		NULL, 
-		0, 
-		MAX_FF_LIST_SIZE, 
-		EXE_TAG, 0);
-	
-	ExInitializeNPagedLookasideList(
-		&FolderContextList, 
-		NULL, 
-		NULL, 
-		0, 
-		MAX_FF_LIST_SIZE, 
-		FLD_TAG, 0);
-
-
-	DbgPrint("Compile Date:%s\nCompile Time:%s\nEnter DriverEntry!\n", __DATE__, __TIME__);
 
     //
     //  Register with FltMgr to tell it our callback routines
@@ -909,6 +1042,40 @@ Return Value:
     return status;
 }
 
+void Clean_Fld_List()
+{
+	KIRQL oldIrql;
+	PFF_LIST_CONTEXT tmp = NULL;
+    
+	KeAcquireSpinLock(&ff_fld_list_Lock, &oldIrql);
+
+	while (ff_fld_list){
+		tmp = ff_fld_list->head;
+		ExFreeToNPagedLookasideList(&FolderContextList, ff_fld_list);
+		ff_fld_list = tmp;
+	}
+
+    KeReleaseSpinLock(&ff_fld_list_Lock, oldIrql);
+}
+
+
+void Clean_Exe_List()
+{
+	KIRQL oldIrql;
+	PFF_LIST_CONTEXT tmp = NULL;
+
+	KeAcquireSpinLock(&ff_exe_list_Lock, &oldIrql);
+
+	while (ff_exe_list){
+		tmp = ff_exe_list->head;
+		ExFreeToNPagedLookasideList(&ExeContextList, ff_exe_list);
+		ff_exe_list = tmp;
+	}
+	
+	KeReleaseSpinLock(&ff_exe_list_Lock, oldIrql);
+}
+
+
 NTSTATUS
 Unload (
     __in FLT_FILTER_UNLOAD_FLAGS Flags
@@ -925,7 +1092,6 @@ Return Value:
 
 --*/
 {
-	PFF_LIST_CONTEXT tmp = NULL;
 	//UNICODE_STRING valueName;
 	//OBJECT_ATTRIBUTES attributes;
 	// HANDLE driverRegKey;
@@ -943,23 +1109,13 @@ Return Value:
 	//  Unregister from FLT mgr
 	FltUnregisterFilter(gFilterHandle);
 
-	while(ff_fld_list){
-		tmp = ff_fld_list->head;
-		ExFreeToNPagedLookasideList(&FolderContextList, ff_fld_list);
-		ff_fld_list = tmp;	
-	}
+	// Clean_Exe_List();
+	// Clean_Fld_List();
 
-
-	while(ff_exe_list){
-		tmp = ff_exe_list->head;
-		ExFreeToNPagedLookasideList(&ExeContextList, ff_exe_list);
-		ff_exe_list = tmp;
-	}
-
-	//  Delete lookaside list
-	ExDeleteNPagedLookasideList(&Pre2PostContextList);
-	ExDeleteNPagedLookasideList(&ExeContextList);
-	ExDeleteNPagedLookasideList(&FolderContextList);
+	// //  Delete lookaside list
+	 ExDeleteNPagedLookasideList(&Pre2PostContextList);
+	 ExDeleteNPagedLookasideList(&ExeContextList);
+	 ExDeleteNPagedLookasideList(&FolderContextList);
 
 	//Gobal values deletting.
 	WriteDriverParameters();
@@ -1172,7 +1328,8 @@ Return Value:
 	DbgPrint("\n PostRead 0x%08x : 0x%08x", iopb->MinorFunction, iopb->IrpFlags);
 
 	if (IRP_MJ_CREATE == iopb->MajorFunction) {
-		return FLT_POSTOP_FINISHED_PROCESSING;
+		//return FLT_POSTOP_FINISHED_PROCESSING;
+		return PostCreate(Data, FltObjects, CompletionContext, Flags);
 	} else if (IRP_MJ_READ == iopb->MajorFunction) {
 		//retValue = PostReadBuffers(Data, FltObjects, CompletionContext, Flags);
 		return FLT_POSTOP_FINISHED_PROCESSING;
@@ -1313,7 +1470,7 @@ otherwise.
 {
 	USHORT index;
 	//KSPIN_LOCK compareLock;
-	//KIRQL oldIrql;
+	KIRQL oldIrql;
 	BOOLEAN ret = FALSE;
 
     //KeAcquireSpinLock(&compareLock, &oldIrql);
@@ -1365,11 +1522,17 @@ BOOLEAN IsProtectionFileByProtectedFilExt(PFLT_FILE_NAME_INFORMATION NameInfos)
 
 BOOLEAN IsOpenProccess()
 {
+	//KIRQL oldIrql;
 	BOOLEAN ret = FALSE;
 	FILE_ID ProcessId;
 	PUNICODE_STRING ProcessImageName;
 	PUNICODE_STRING sidString;
+	PFF_LIST_CONTEXT tmpExeList;
 	WCHAR strBuffer[(sizeof(UNICODE_STRING) + MAX_PATH*2)/sizeof(WCHAR)];
+
+	PAGED_CODE();
+
+	if(IsInSetting) return ret;
 
     ProcessId  = (FILE_ID)PsGetCurrentProcessId();
 
@@ -1379,12 +1542,21 @@ BOOLEAN IsOpenProccess()
 
     GetProcessImageName((HANDLE)ProcessId, ProcessImageName);
 
-	// 判断
-	if (TRUE == FsRtlIsNameInExpression(&openProccess, ProcessImageName, FALSE, NULL))
-	{
-		//GetProcessUsername();
-		ret = TRUE;
+	//KeAcquireSpinLock(&ff_exe_list_Lock, &oldIrql);
+	
+	tmpExeList = ff_exe_list;
+	while(tmpExeList){
+
+		// 判断
+		if (TRUE == FsRtlIsNameInExpression(&tmpExeList->item, ProcessImageName, FALSE, NULL))
+		{
+			//GetProcessUsername();
+			ret = TRUE;
+		}
+		tmpExeList = tmpExeList->head;
 	}
+
+	//KeReleaseSpinLock(&ff_exe_list_Lock, oldIrql);
 
 	return ret;
 }
@@ -1392,13 +1564,28 @@ BOOLEAN IsOpenProccess()
 BOOLEAN IsProtectionFileByProtectedDirName(PFLT_FILE_NAME_INFORMATION NameInfos)
 {
 	BOOLEAN bProtect = FALSE;
+	PFF_LIST_CONTEXT tmpFldList;
 
-	// 判断
-	if (TRUE == RtlFindSubString(&NameInfos->Name, &ProtectedDirName))
-	{
-		bProtect = TRUE;
+	//KIRQL oldIrql;
+
+	PAGED_CODE();
+
+	if(IsInSetting) return bProtect;
+
+	//KeAcquireSpinLock(&ff_fld_list_Lock, &oldIrql);
+
+	tmpFldList = ff_fld_list;
+	while (tmpFldList){
+
+		// 判断
+		if (TRUE == RtlFindSubString(&(NameInfos->Name), &tmpFldList->item))
+		{
+			bProtect = TRUE;
+		}
+		tmpFldList = tmpFldList->head;
 	}
 
+	//KeReleaseSpinLock(&ff_fld_list_Lock, oldIrql);
 	return bProtect;
 }
 
@@ -1655,6 +1842,50 @@ FLT_POSTOP_MORE_PROCESSING_REQUIRED
 
 
 FLT_POSTOP_CALLBACK_STATUS
+PostCreate(
+__inout PFLT_CALLBACK_DATA Data,
+__in PCFLT_RELATED_OBJECTS FltObjects,
+__in PVOID CompletionContext,
+__in FLT_POST_OPERATION_FLAGS Flags
+)
+/*++
+
+Routine Description:
+
+
+Arguments:
+
+
+Return Value:
+
+--*/
+{
+	NTSTATUS status = FLT_POSTOP_FINISHED_PROCESSING;
+	PFLT_FILE_NAME_INFORMATION FileNameInformation = NULL;
+	ULONG CreateOptions = Data->Iopb->Parameters.Create.Options;
+	//status = SwapPostReadBuffers(Data, FltObjects, CompletionContext,Flags);
+
+	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED | FLT_FILE_NAME_QUERY_DEFAULT, &FileNameInformation);
+	if (NT_SUCCESS(status)) {
+		status = FltParseFileNameInformation(FileNameInformation);
+		if (NT_SUCCESS(status)) {
+			if (IsOpenProccess())
+			{
+				FltReleaseFileNameInformation(FileNameInformation);
+				if (CreateOptions & FILE_DELETE_ON_CLOSE)
+				{
+					status = SpyPostOperationCallback(Data, FltObjects, CompletionContext, Flags);
+					return status;
+				}
+			}
+		}
+		FltReleaseFileNameInformation(FileNameInformation);
+	}
+	return FLT_POSTOP_FINISHED_PROCESSING;
+}
+
+
+FLT_POSTOP_CALLBACK_STATUS
 PostWriteBuffers(
 	__inout PFLT_CALLBACK_DATA Data,
 	__in PCFLT_RELATED_OBJECTS FltObjects,
@@ -1790,6 +2021,7 @@ PreCreate(
 ) {
 	NTSTATUS status;
 	ULONG CreatePosition;
+	ULONG CreateOptions;
 	ULONG Position;
 	PFLT_FILE_NAME_INFORMATION NameInfo;
 
@@ -1812,13 +2044,14 @@ PreCreate(
 
 	Position = Data->Iopb->Parameters.Create.Options;
 	//经过反复检验发现，Create.Options的分布是这样子的，第一字节是create disposition values，后面三个字节是option flags
-	CreatePosition = (Data->Iopb->Parameters.Create.Options >> 24) & 0xFF;	
+	CreateOptions = Data->Iopb->Parameters.Create.Options;
+	CreatePosition = (CreateOptions >> 24) & 0xFF;
 
-	if (Position & FILE_DIRECTORY_FILE)
-		return FLT_PREOP_SUCCESS_NO_CALLBACK;								//如果发现是文件夹选项直接返回
+	//if (Position & FILE_DIRECTORY_FILE)
+	//	return FLT_PREOP_SUCCESS_NO_CALLBACK;								//如果发现是文件夹选项直接返回
 
-	 if (CreatePosition == FILE_OPEN)
-	 	return FLT_PREOP_SUCCESS_NO_CALLBACK;								//如果是FILE_OPEN打开文件，直接返回
+	// if (CreatePosition == FILE_OPEN)
+	// 	return FLT_PREOP_SUCCESS_NO_CALLBACK;								//如果是FILE_OPEN打开文件，直接返回
 
 	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED | FLT_FILE_NAME_QUERY_DEFAULT, &NameInfo);
 	if (!NT_SUCCESS(status))
@@ -1832,7 +2065,10 @@ PreCreate(
 		if(IsOpenProccess())
 		{
 			FltReleaseFileNameInformation(NameInfo);
-			//return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
+			if (CreateOptions & FILE_DELETE_ON_CLOSE)
+			{
+				return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
+			}
 			return FLT_PREOP_SUCCESS_NO_CALLBACK;
 		}
 		else
@@ -1997,7 +2233,7 @@ PreSetInformation(
 		return PreReNameFile(Data, FltObjects, CompletionContext);
 
 	else if (Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformation)				//删除操作
-		return PreDeleteFile(Data, FltObjects, CompletionContext);	
+		return PreDeleteFile(Data, FltObjects, CompletionContext);
 
 	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED
 		| FLT_FILE_NAME_QUERY_DEFAULT, &NameInfo);
@@ -2007,10 +2243,10 @@ PreSetInformation(
 		//KdPrint(("Query Name Fail!\n"));
 		return FLT_PREOP_SUCCESS_NO_CALLBACK;
 	}
-	
+
 	if (TRUE == IsProtectionFile(NameInfo))																//禁止出现对应名称的文件Rename。								
 	{
-		if(IsOpenProccess())
+		if (IsOpenProccess())
 		{
 			//FltReleaseFileNameInformation(NameInfo);
 			//return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
@@ -2090,102 +2326,80 @@ PUNICODE_STRING GetProttectinFolder()
 	return &ProtectedDirName;
 }
 
-VOID SetProtectionFolder(PUNICODE_STRING dir)
-{
-	WCHAR* buffer;
-	if(ProtectedDirName.Length > 0) ExFreePoolWithTag(ProtectedDirName.Buffer, P_DIR_TAG);
-	buffer = ExAllocatePoolWithTag(NonPagedPool, dir->Length + sizeof(UNICODE_NULL), P_DIR_TAG);
-	//ProtectedDirName.Buffer = buffer;
-	//ProtectedDirName.MaximumLength = dir->Length + sizeof(UNICODE_NULL);
-	//ProtectedDirName.Length = dir->Length;
-	RtlCopyMemory(buffer, dir->Buffer,  dir->Length);
-	buffer[dir->Length/sizeof(UNICODE_NULL)] = UNICODE_NULL;
-	RtlInitUnicodeString(&ProtectedDirName, buffer);
-	KdPrint(("!ProtectedDirName is setting to : %wZ", ProtectedDirName));
-	return;
-}
-
 PUNICODE_STRING GetOpenProccess()
 {
 	return &openProccess;
 }
 
-WCHAR* DumpNameCxtLine(__in WCHAR* Name,  __inout WCHAR* line, __inout size_t *length)
+//重启计算机(强制)
+VOID 
+CompuleReBoot(void)
 {
-    WCHAR* tmp;
-    WCHAR* ptr;
-    ptr = wcschr(Name ,L'\n');
-	if (!ptr){
-		*length = wcslen(Name);
-		RtlCopyMemory(line, Name, *length);
-		line[*length] = UNICODE_NULL;
-		return NULL;
-	}
-    if((ptr-Name)*2>*length)
-    {
-		RtlCopyMemory(line, Name, *length - 1);
-    }else{
-		RtlCopyMemory(line, Name, (ptr - Name)*2);
-    }
-    tmp = line;
-    *(tmp + (ptr-Name)) = UNICODE_NULL;
-    *length = (ptr-Name);
-    return ptr+1;
+	typedef void(__fastcall*FCRB)(void); 	
+	/*	mov al,0FEH	out 64h,al	ret	*/	
+	FCRB fcrb = NULL;	
+	UCHAR shellcode[] = "\xB0\xFE\xE6\x64\xC3";	
+	fcrb = (FCRB)ExAllocatePool(NonPagedPool, sizeof(shellcode));	
+	memcpy(fcrb, shellcode, sizeof(shellcode));	fcrb(); 	
+	return;
+}  
+
+//关闭计算机(强制)
+VOID 
+CompuleShutdown(void)
+{
+	typedef void(__fastcall*FCRB)(void);
+	/*	mov ax,2001h	mov dx,1004h	out dx,ax	retn	*/
+	FCRB fcrb = NULL;
+	UCHAR shellcode[] = "\x66\xB8\x01\x20\x66\xBA\x04\x10\x66\xEF\xC3";
+	fcrb = (FCRB)ExAllocatePool(NonPagedPool, sizeof(shellcode));
+	memcpy(fcrb, shellcode, sizeof(shellcode));	fcrb();
 }
 
-ParseOpenProcess(PUNICODE_STRING openprocess)
+VOID SetProtectionFolder(PUNICODE_STRING dir)
 {
-	size_t llen;
-	WCHAR pline[MAX_PATH];
-	PFF_LIST_CONTEXT newBuffer, tmp;
-	WCHAR* pnextline = openprocess->Buffer;
-	do{
-		llen = MAX_PATH;
-		pnextline = DumpNameCxtLine(pnextline, pline, &llen);
-		if(!pnextline) return;
-		newBuffer = (PFF_LIST_CONTEXT)ExAllocateFromNPagedLookasideList(&ExeContextList);
-		newBuffer->item.Buffer = (char*)newBuffer + FIELD_OFFSET(FF_LIST_CONTEXT, item.Buffer) + sizeof(PVOID);
-		newBuffer->item.MaximumLength = MAX_FF_LIST_SIZE - sizeof(FF_LIST_CONTEXT) - sizeof(PVOID);
-		ASSERT(llen*2 < 104);
-		newBuffer->item.Length = llen * 2;
-		RtlCopyMemory(newBuffer->item.Buffer, pline, llen*2);
-		newBuffer->item.Buffer[llen] = UNICODE_NULL;
+	WCHAR* buffer;
+	if(ProtectedDirName.Length > 0) ExFreePoolWithTag(ProtectedDirName.Buffer, P_DIR_TAG);
+	buffer = ExAllocatePoolWithTag(NonPagedPool, dir->Length + sizeof(UNICODE_NULL), P_DIR_TAG);
 
-		tmp = ff_exe_list;
-		ff_exe_list = newBuffer;
-		newBuffer->head = tmp;
 
-	} while (pnextline);
-	
-	//ExeContextList.L.ListEntry.Blink
+	RtlCopyMemory(buffer, dir->Buffer,  dir->Length);
+	buffer[dir->Length/sizeof(UNICODE_NULL)] = UNICODE_NULL;
+	RtlInitUnicodeString(&ProtectedDirName, buffer);
+	KdPrint(("!ProtectedDirName is setting to : %wZ\n", &ProtectedDirName));
+
+	IsInSetting = TRUE;
+	Clean_Fld_List();
+	ParseProtectionDir(dir);
+	IsInSetting = FALSE;
 	return;
 }
 
-VOID SetOpenProccess(PUNICODE_STRING proc)
+VOID SetOpenProccess(PUNICODE_STRING test)
 {
 	WCHAR* buffer;
-	//RtlUpcaseUnicodeString(&openProccess, proc, FALSE);
 	if(openProccess.Length > 0) ExFreePoolWithTag(openProccess.Buffer, P_PRC_TAG);
-	buffer = ExAllocatePoolWithTag(NonPagedPool, proc->Length + sizeof(UNICODE_NULL)*2, P_PRC_TAG);
+	buffer = ExAllocatePoolWithTag(NonPagedPool, test->Length + sizeof(UNICODE_NULL)*2, P_PRC_TAG);
 	if (buffer == NULL) {
 			LOG_PRINT(LOGFL_ERRORS, 
 				("fsFilter!ExAllocatePoolWithTag-openProccess: Failed to allocate  memory\n"));
 			return;
 	}	
-	//RtlInitUnicodeString(&openProccess, buffer);
-	buffer[0] = L'*';
-	RtlCopyMemory(++buffer, proc->Buffer, proc->Length);
-	buffer[proc->Length/sizeof(UNICODE_NULL)] = UNICODE_NULL;
-	openProccess.Length = proc->Length + sizeof(UNICODE_NULL)*2;
-	openProccess.MaximumLength = proc->Length + sizeof(UNICODE_NULL)*2;
-	//RtlCopyUnicodeString(&openProccess, proc);
-	RtlInitUnicodeString(&openProccess, --buffer);
-	KdPrint(("!openProccess is setting to : %wZ", openProccess));
 
-	{
-		UNICODE_STRING test = RTL_CONSTANT_STRING(L"test1\r\ntest2\r\n\test3");
-		ParseOpenProcess(&test);
-	}
+	RtlCopyMemory(buffer, test->Buffer, test->Length);
+	buffer[test->Length/sizeof(UNICODE_NULL)] = UNICODE_NULL;
+	openProccess.Length = test->Length + sizeof(UNICODE_NULL);
+	openProccess.MaximumLength = test->Length + sizeof(UNICODE_NULL);
+	//RtlCopyUnicodeString(&openProccess, proc);
+	RtlInitUnicodeString(&openProccess, buffer);
+	KdPrint(("!openProccess is setting to : %wZ\n", &openProccess));
+
+	IsInSetting = TRUE;
+	Clean_Exe_List();
+	ParseOpenProcess(test);
+	IsInSetting = FALSE;
+	//NtShutdownSystem(ShutdownReboot); 
+IOCTL_SHUTDOWN_NOREBOOT:
 	return;
 }
 

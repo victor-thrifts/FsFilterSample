@@ -155,8 +155,9 @@ WCHAR* DumpNameCxtLine(__in WCHAR* Name,  __inout WCHAR* line, __inout size_t *l
 {
     WCHAR* tmp;
     WCHAR* ptr;
+    if (!Name) return UNICODE_NULL;
     ptr = wcschr(Name ,L'\n');
-	if (!ptr) return NULL;
+	if (!ptr) return UNICODE_NULL;
     if((ptr-Name+1)>*length)
     {
         wcsncpy_s(line, *length, Name, *length-1);
@@ -368,47 +369,52 @@ Return Value:
                         context->OutputFile );
         }
 
-        if(g_RetrieveLogRecordsCallback)
-        {
-            if(pLogRecord->Name != NULL) {
-                WCHAR pline[MAX_PATH];
-                UCHAR fileName[MAX_PATH*2];
-                UCHAR author[MAX_PATH*2];
-				UCHAR user[MAX_PATH*2];
-                CHAR time[TIME_BUFFER_LENGTH];
-                FILETIME localTime;
-                SYSTEMTIME systemTime;
-                size_t llen = MAX_PATH;
-                WCHAR* pnextline = DumpNameCxtLine(pLogRecord->Name, pline, &llen);
-                llen = WideCharToMultiByte(CP_UTF8, 0, pline, llen, fileName, MAX_PATH*2, NULL, NULL);
-                //strcpy_s(fileName, llen, (char*)pline);
-                fileName[llen] = '\0';
+        __try{
+            if(g_RetrieveLogRecordsCallback)
+            {
+                if(pLogRecord->Name != NULL) {
+                    WCHAR pline[MAX_PATH];
+                    UCHAR fileName[MAX_PATH*2];
+                    UCHAR author[MAX_PATH*2];
+                    UCHAR user[MAX_PATH*2];
+                    CHAR time[TIME_BUFFER_LENGTH];
+                    FILETIME localTime;
+                    SYSTEMTIME systemTime;
+                    size_t llen = MAX_PATH;
+                    WCHAR* pnextline = DumpNameCxtLine(pLogRecord->Name, pline, &llen);
+                    llen = WideCharToMultiByte(CP_UTF8, 0, pline, llen, fileName, MAX_PATH*2, NULL, NULL);
+                    //strcpy_s(fileName, llen, (char*)pline);
+                    fileName[llen] = '\0';
 
-                llen = MAX_PATH;
-                pnextline = DumpNameCxtLine(pnextline, pline, &llen);
-                llen = WideCharToMultiByte(CP_UTF8, 0, pline, llen, author, MAX_PATH*2, NULL, NULL);
-                //strcpy_s(author, llen, (char*)pline);
-                author[llen] = '\0';
+                    llen = MAX_PATH;
+                    pnextline = DumpNameCxtLine(pnextline, pline, &llen);
+                    llen = WideCharToMultiByte(CP_UTF8, 0, pline, llen, author, MAX_PATH*2, NULL, NULL);
+                    //strcpy_s(author, llen, (char*)pline);
+                    author[llen] = '\0';
 
-				llen = MAX_PATH;
-				pnextline = DumpNameCxtLine(pnextline, pline, &llen);
-				llen = WideCharToMultiByte(CP_UTF8, 0, pline, llen, user, MAX_PATH*2, NULL, NULL);
-				//strcpy_s(user, llen, (char*)pline);
-				user[llen] = '\0';
+                    llen = MAX_PATH;
+                    pnextline = DumpNameCxtLine(pnextline, pline, &llen);
+                    llen = WideCharToMultiByte(CP_UTF8, 0, pline, llen, user, MAX_PATH*2, NULL, NULL);
+                    //strcpy_s(user, llen, (char*)pline);
+                    user[llen] = '\0';
 
-                FileTimeToLocalFileTime( (FILETIME *)&(pRecordData->OriginatingTime), &localTime );
-                FileTimeToSystemTime( &localTime, &systemTime );
+                    FileTimeToLocalFileTime( (FILETIME *)&(pRecordData->OriginatingTime), &localTime );
+                    FileTimeToSystemTime( &localTime, &systemTime );
 
-                if (FormatSystemTime( &systemTime, time, TIME_BUFFER_LENGTH )) {
+                    if (FormatSystemTime( &systemTime, time, TIME_BUFFER_LENGTH )) {
 
-                    (*g_RetrieveLogRecordsCallback)(fileName, pRecordData->Reserved[0], time,  author, user);
+                        (*g_RetrieveLogRecordsCallback)(fileName, pRecordData->Reserved[0], time,  author, user);
 
-                } else {
+                    } else {
 
-                    (*g_RetrieveLogRecordsCallback)(fileName, pRecordData->Reserved[0], "", author, user);
+                        (*g_RetrieveLogRecordsCallback)(fileName, pRecordData->Reserved[0], "", author, user);
 
+                    }
                 }
             }
+        }
+        __except(1==1){
+            g_RetrieveLogRecordsCallback = NULL;
         }
 
         //
@@ -1374,7 +1380,7 @@ Return Value:
 
     //fprintf( File, "\t0x%08p", (PVOID) RecordData->DeviceObject );
     //fprintf( File, "\t0x%08p", (PVOID) RecordData->FileObject );
-    fprintf( File, "\t0x%08p", (PVOID) RecordData->Transaction );
+    //fprintf( File, "\t0x%08p", (PVOID) RecordData->Transaction );
     //fprintf( File, "\t0x%08lx:0x%p", RecordData->Status, (PVOID)RecordData->Information );
 
     //fprintf( File, "\t0x%p", RecordData->Arg1 );
@@ -1542,7 +1548,7 @@ Return Value:
 
     //printf( "%08p ", (PVOID) RecordData->DeviceObject );
     //printf( "%08p ", (PVOID) RecordData->FileObject );
-    printf( "%08p ", (PVOID) RecordData->Transaction );
+    //printf( "%08p ", (PVOID) RecordData->Transaction );
 
     //printf( "%08lx:%p ", RecordData->Status, (PVOID)RecordData->Information );
 

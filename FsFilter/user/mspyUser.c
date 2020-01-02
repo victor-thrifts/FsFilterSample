@@ -43,18 +43,20 @@ __user_code
 
 HANDLE gport = INVALID_HANDLE_VALUE;
 
+typedef struct _VolumeDosList{
+  struct _VolumeDosList *head;
+  WCHAR DosName[16];
+  WCHAR VolumeName[32];  
+} VolumeDosList, *PVolumeDosList;
+
+PVolumeDosList vDosList = NULL;
+
 DWORD
 InterpretCommand (
     __in int argc,
     __in_ecount(argc) char *argv[],
     __in PLOG_CONTEXT Context
     );
-
-VOID
-ListDevices (
-    VOID
-    );
-
 
 DWORD
 RetrieveCmd(
@@ -1204,6 +1206,17 @@ Return Value:
 }
 
 
+void FreevDosList()
+{
+	PVolumeDosList tmp;
+	while (vDosList){
+		tmp = vDosList;
+		vDosList = vDosList->head;
+		HeapFree(GetProcessHeap(), 0, tmp);
+	}
+}
+
+
 void
 ListDevices(
     VOID
@@ -1227,6 +1240,7 @@ Return Value:
     HRESULT hResult = S_OK;
     __nullterminated WCHAR driveLetter[15] = { 0 };
     ULONG instanceCount;
+	PVolumeDosList tmpvDosList = NULL;
 
     __try {
 
@@ -1258,6 +1272,8 @@ Return Value:
         //
         //  Loop through all of the filters, displaying instance information
         //
+		
+		if (vDosList) FreevDosList();
 
         do {
 
@@ -1268,13 +1284,30 @@ Return Value:
 
             instanceCount = IsAttachedToVolume(volumeBuffer->FilterVolumeName);
 
-            printf( "%-14ws  %-36ws  %s",
-                    (SUCCEEDED( FilterGetDosName(
-                                volumeBuffer->FilterVolumeName,
-                                driveLetter,
-                                sizeof(driveLetter)/sizeof(WCHAR) )) ? driveLetter : L""),
-                    volumeBuffer->FilterVolumeName,
-                    (instanceCount > 0) ? "Attached" : "");
+			vDosList = HeapAlloc(GetProcessHeap(), 0, sizeof(VolumeDosList));
+
+			if (SUCCEEDED(FilterGetDosName(volumeBuffer->FilterVolumeName, driveLetter, sizeof(driveLetter) / sizeof(WCHAR))))
+			{
+				wcscpy_s(vDosList->DosName, 16, driveLetter);
+                vDosList->DosName[2] = UNICODE_NULL;
+			}
+			else{
+				wcscpy_s(vDosList->DosName, 16, L"");
+                vDosList->DosName[15] = UNICODE_NULL;
+			}
+            
+			wcscpy_s(vDosList->VolumeName, 32, volumeBuffer->FilterVolumeName);
+            vDosList->VolumeName[31] = UNICODE_NULL;
+
+
+			printf("%-14ws  %-36ws  %s",
+				vDosList->DosName,
+				vDosList->VolumeName,
+				(instanceCount > 0) ? "Attached" : "");
+
+			vDosList->head = tmpvDosList;
+			tmpvDosList = vDosList;
+			
 
             if (instanceCount > 1) {
 
@@ -1290,6 +1323,8 @@ Return Value:
                                                                         volumeBuffer,
                                                                         sizeof(buffer)-sizeof(WCHAR),    //save space to null terminate name
                                                                         &volumeBytesReturned ) ));
+
+		vDosList = tmpvDosList;
 
         if (HRESULT_FROM_WIN32( ERROR_NO_MORE_ITEMS ) == hResult) {
 

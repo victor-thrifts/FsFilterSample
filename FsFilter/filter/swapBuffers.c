@@ -549,12 +549,6 @@ Status of the operation
 	//UNREFERENCED_PARAMETER(Flags);
 
 	//
-	//  Get debug trace flags
-	//
-
-	SwapReadDriverParameters(RegistryPath);
-
-	//
 	//  Init lookaside list used to allocate our context structure used to
 	//  pass information from out preOperation callback to our postOperation
 	//  callback.
@@ -567,6 +561,12 @@ Status of the operation
 		sizeof(PRE_2_POST_CONTEXT),
 		PRE_2_POST_TAG,
 		0);
+
+	//
+	//  Get debug trace flags
+	//
+
+	SwapReadDriverParameters(RegistryPath);		
 
 
 #ifdef __SWAP_BUFFERS_STANDALONE_C		

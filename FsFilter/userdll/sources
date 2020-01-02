@@ -17,7 +17,7 @@ LINKLIBS=$(SDK_LIB_PATH)\shell32.lib	\
 INCLUDES=$(INCLUDES);         \
          $(IFSKIT_INC_PATH);  \
          $(DDK_INC_PATH);     \
-
+		 
 TARGETLIBS=$(TARGETLIBS) \
            $(IFSKIT_LIB_PATH)\fltLib.lib	\
 		   $(SDK_LIB_PATH)\kernel32.lib 	\

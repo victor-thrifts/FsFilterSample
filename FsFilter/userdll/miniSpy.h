@@ -75,7 +75,7 @@ typedef struct _MINISPYVER {
 //  Local definitions for passing parameters between the filter and user mode
 //
 
-typedef ULONG_PTR FILE_ID;
+typedef __int64 FILE_ID;
 typedef __success(return >= 0) LONG NTSTATUS;
 
 //

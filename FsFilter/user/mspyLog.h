@@ -59,6 +59,12 @@ typedef struct _LOG_CONTEXT {
 //  Function prototypes
 //
 
+VOID
+ListDevices (
+    VOID
+    );
+
+
 DWORD WINAPI
 RetrieveLogRecords(
     __in LPVOID lpParameter

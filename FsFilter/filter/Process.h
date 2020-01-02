@@ -6,7 +6,7 @@
 *************************************************************************/
 
 NTSTATUS GetCurrentProcessName();
-NTSTATUS GetSID(PUNICODE_STRING sidString, PACCESS_STATE AccessState);
+NTSTATUS GetSID(__deref_out PUNICODE_STRING sidString, PACCESS_STATE AccessState);
 NTSTATUS GetProcessImageName(HANDLE processId, PUNICODE_STRING ProcessImageName);
 
 

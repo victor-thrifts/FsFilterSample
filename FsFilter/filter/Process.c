@@ -209,7 +209,7 @@ UNICODE_STRING *GetProcessUsername()
 	}
 	userName.Length = 0;
 	userName.MaximumLength = userInformation->UserName.Length;
-	userName.Buffer = ExAllocatePool(NonPagedPool, userName.MaximumLength);
+	userName.Buffer = ExAllocatePoolWithTag(NonPagedPool, userName.MaximumLength, 'resu');
 	if (userName.Buffer == NULL)
 	{
 		KdPrint(("GetUserName(): ExAllocatePool fail\n"));
@@ -220,8 +220,8 @@ UNICODE_STRING *GetProcessUsername()
 	return &userName;
 }
 
-
-NTSTATUS GetSID(PUNICODE_STRING sidString, PACCESS_STATE AccessState)
+NTSTATUS
+GetSID(__deref_out PUNICODE_STRING sidString, PACCESS_STATE AccessState)
 {
 	NTSTATUS ntStatus;
 	PVOID Token;
@@ -243,7 +243,7 @@ NTSTATUS GetSID(PUNICODE_STRING sidString, PACCESS_STATE AccessState)
 	tokenuser.User = tokenuser_user;
 	tokenuser_user.Sid = sid;
 
-	sidStringBuffer = ExAllocatePool(NonPagedPool, 128);
+	sidStringBuffer = ExAllocatePoolWithTag(NonPagedPool, 128, 'dis_');
 	RtlInitEmptyUnicodeString(sidString, sidStringBuffer, 128);
 
 	Token = PsReferencePrimaryToken(PsGetCurrentProcess());
@@ -281,7 +281,7 @@ NTSTATUS GetSID(PUNICODE_STRING sidString, PACCESS_STATE AccessState)
 		return STATUS_FAIL_CHECK;
 	}
 
-	tokenInfoBuffer = (PTOKEN_USER)ExAllocatePool(NonPagedPool, requiredLength);
+	tokenInfoBuffer = (PTOKEN_USER)ExAllocatePoolWithTag(NonPagedPool, requiredLength, 'pmt_');
 	if (tokenInfoBuffer) {
 		ntStatus = ZwQueryInformationToken(
 			tokenHandle,
