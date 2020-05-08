@@ -82,13 +82,15 @@ NTSTATUS GetProcessImageName(HANDLE processId, PUNICODE_STRING ProcessImageName)
 
 	PAGED_CODE(); // this eliminates the possibility of the IDLE Thread/Process
 
+
 	status = PsLookupProcessByProcessId(processId, &eProcess);
 
 	if(NT_SUCCESS(status))
 	{
-		status = ObOpenObjectByPointer(eProcess, 0, NULL, 0, 0, KernelMode, &hProcess);
+		status = ObOpenObjectByPointer(eProcess, OBJ_KERNEL_HANDLE, NULL, 0, 0, KernelMode, &hProcess);
 		if(NT_SUCCESS(status))
 		{
+
 		} else {
 			DbgPrint("ObOpenObjectByPointer Failed: %08x\n", status);
 		}
@@ -112,33 +114,41 @@ NTSTATUS GetProcessImageName(HANDLE processId, PUNICODE_STRING ProcessImageName)
 		}
 	}
 
+	status = ZwQueryInformationProcess(hProcess,
+		ProcessImageFileName,
+		NULL, // buffer
+		0, // buffer size
+		&returnedLength);
+
+	if (STATUS_INFO_LENGTH_MISMATCH != status) {
+		return status;
+	}
+
+	/* Check there is enough space to store the actual process
+	path when it is found. If not return an error with the
+	required size */
+	bufferLength = returnedLength - sizeof(UNICODE_STRING);
+
+	if (bufferLength == 0) return STATUS_UNSUCCESSFUL;
+
+	if (ProcessImageName->MaximumLength < bufferLength)
+	{
+		//ProcessImageName->MaximumLength = (USHORT) bufferLength;
+		return STATUS_BUFFER_OVERFLOW;
+	}
+
 	/* Query the actual size of the process path */
 	status = ZwQueryInformationProcess( hProcess,
 										ProcessImageFileName,
 										ProcessImageName, // buffer
-										sizeof(UNICODE_STRING) + MAX_PATH*2, // buffer size
+										ProcessImageName->MaximumLength, // buffer size
 										&returnedLength);
 
-	if (STATUS_INFO_LENGTH_MISMATCH == status) {
-		return STATUS_INFO_LENGTH_MISMATCH;
-	}
-
-	/* Check there is enough space to store the actual process
-	   path when it is found. If not return an error with the
-	   required size */
-	bufferLength = returnedLength - sizeof(UNICODE_STRING);
-
-	if(bufferLength == 0) return STATUS_UNSUCCESSFUL;
-
-	if (ProcessImageName->MaximumLength < bufferLength)
-	{
-		ProcessImageName->MaximumLength = (USHORT) bufferLength;
-		return STATUS_BUFFER_OVERFLOW;   
-	}
+	ZwClose(hProcess);
 
 	if (NT_SUCCESS(status)) 
 	{
-		DbgPrint("The ProcessID: %d is %ws\n",processId, ProcessImageName->Buffer);
+		return STATUS_SUCCESS;
 	}
 
 	return status;
@@ -164,8 +174,6 @@ NTSTATUS GetCurrentThreadImageName(PFLT_CALLBACK_DATA Data,  PUNICODE_STRING Pro
 	GetProcessImageName(hProcess,&fullPath);
 	
 	ExFreePoolWithTag(fullPath.Buffer, 'uUT1');
-	fullPath.Buffer = NULL;
-	fullPath.Length = 0;
 	return STATUS_SUCCESS;
 }
 
@@ -228,7 +236,7 @@ GetSID(__deref_out PUNICODE_STRING sidString, PACCESS_STATE AccessState)
 	HANDLE tokenHandle;
 	PTOKEN_USER tokenInfoBuffer;
 	ULONG requiredLength;
-	PWCHAR sidStringBuffer;
+	//PWCHAR sidStringBuffer;
 	UNICODE_STRING nameString;
 	UNICODE_STRING domainString;
 	WCHAR* nameBuffer;
@@ -243,8 +251,8 @@ GetSID(__deref_out PUNICODE_STRING sidString, PACCESS_STATE AccessState)
 	tokenuser.User = tokenuser_user;
 	tokenuser_user.Sid = sid;
 
-	sidStringBuffer = ExAllocatePoolWithTag(NonPagedPool, 128, 'dis_');
-	RtlInitEmptyUnicodeString(sidString, sidStringBuffer, 128);
+	//sidStringBuffer = ExAllocatePoolWithTag(NonPagedPool, 128, 'dis_');
+	//RtlInitEmptyUnicodeString(sidString, sidStringBuffer, 128);
 
 	Token = PsReferencePrimaryToken(PsGetCurrentProcess());
 
@@ -293,7 +301,7 @@ GetSID(__deref_out PUNICODE_STRING sidString, PACCESS_STATE AccessState)
 
 	if (!NT_SUCCESS(ntStatus) || !tokenInfoBuffer) {
 		KdPrint(("\nGetSID: Error getting token information: %x\n", ntStatus));
-		if (tokenInfoBuffer) ExFreePool(tokenInfoBuffer);
+		ExFreePoolWithTag(tokenInfoBuffer, 'pmt_');
 		ZwClose(tokenHandle);
 		return STATUS_FAIL_CHECK;
 	}
@@ -304,12 +312,19 @@ GetSID(__deref_out PUNICODE_STRING sidString, PACCESS_STATE AccessState)
 	//
 	// Got it, now convert to text representation
 	//
-	ntStatus = RtlConvertSidToUnicodeString(sidString, tokenInfoBuffer->User.Sid, FALSE);
-	sidString->Buffer[sidString->Length + 1] = '\0';
-	KdPrint(("\nGetSID: sidString = %ws\n", sidString->Buffer));
+	ntStatus = RtlConvertSidToUnicodeString(sidString, tokenInfoBuffer->User.Sid, TRUE);
+	if (STATUS_SUCCESS!=ntStatus)
+	{
+		KdPrint(("\nGetSID: Unable to convert SID to text: %x\n", ntStatus));
+		ExFreePoolWithTag(tokenInfoBuffer, 'pmt_');
+		return STATUS_FAIL_CHECK;
+	}
+	ASSERT(sidString->MaximumLength > sidString->Length);
+	sidString->Buffer[sidString->Length] = L'\0';
+	//KdPrint(("\nGetSID: sidString = %ws\n", sidString->Buffer));
 
-	SIDLength = RtlLengthSid(tokenInfoBuffer->User.Sid);
-	if (FALSE == RtlValidSid(tokenInfoBuffer->User.Sid)) return STATUS_FAIL_CHECK;
+	//SIDLength = RtlLengthSid(tokenInfoBuffer->User.Sid);
+	//if (FALSE == RtlValidSid(tokenInfoBuffer->User.Sid)) return STATUS_FAIL_CHECK;
 
 	//ntStatus = SecLookupAccountSid(
 	//	tokenInfoBuffer-> User.Sid,
@@ -352,7 +367,7 @@ GetSID(__deref_out PUNICODE_STRING sidString, PACCESS_STATE AccessState)
 	//	ExFreePool(domainBuffer);
 	//}
 
-	ExFreePool(tokenInfoBuffer);
+	ExFreePoolWithTag(tokenInfoBuffer, 'pmt_');
 	if (!NT_SUCCESS(ntStatus)) {
 		KdPrint(("\nGetSID: Unable to convert SID to text: %x\n", ntStatus));
 		return STATUS_FAIL_CHECK;

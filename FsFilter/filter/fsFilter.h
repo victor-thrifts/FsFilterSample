@@ -189,3 +189,4 @@ PreSetInformation(
 
 BOOLEAN IsOpenProccess();
 BOOLEAN IsProtectionFileByProtectedDirName(PFLT_FILE_NAME_INFORMATION NameInfos);
+BOOLEAN IsProtectionParentDirByProtectedDirName(PFLT_FILE_NAME_INFORMATION NameInfos);

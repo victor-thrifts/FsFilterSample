@@ -355,9 +355,9 @@ Return Value:
         //  Need space for NULL termination
         //
 
-        if (Name->Length > (MAX_NAME_SPACE - sizeof( UNICODE_NULL ))) {
+		if (Name->Length > (REMAINING_NAME_SPACE(LogRecord) - sizeof(UNICODE_NULL))) {
 
-            nameCopyLength = MAX_NAME_SPACE - sizeof( UNICODE_NULL );
+			nameCopyLength = REMAINING_NAME_SPACE(LogRecord) - sizeof(UNICODE_NULL);
 
         } else {
 
@@ -478,8 +478,9 @@ Return Value:
     recordData->ProcessId       = (FILE_ID)PsGetCurrentProcessId();
 
     ProcessImageName = (PUNICODE_STRING)strBuffer;
-    ProcessImageName->MaximumLength  = sizeof(UNICODE_STRING) + MAX_PATH*2;
+	ProcessImageName->MaximumLength = MAX_PATH * 2 - sizeof(PVOID);
     ProcessImageName->Length = 0;
+	ProcessImageName->Buffer = strBuffer + sizeof(UNICODE_STRING);
 
     GetProcessImageName((HANDLE)recordData->ProcessId, ProcessImageName);
     SpySetRecordName( &(RecordList->LogRecord), ProcessImageName );
@@ -498,14 +499,16 @@ Return Value:
 
 		//AccessState = Data->Iopb->Parameters.Create.SecurityContext->AccessState;
 		AccessState = NULL;
-		sidbuf = ExAllocatePoolWithTag(NonPagedPool, 128, SID_TAG);
-		RtlInitUnicodeString(&sidString, sidbuf);
+		//sidbuf = ExAllocatePoolWithTag(NonPagedPool, 128, SID_TAG);
+		//RtlInitUnicodeString(&sidString, sidbuf);
+		//sidString.MaximumLength = 128;
 
 		if (GetSID(&sidString, AccessState) == STATUS_SUCCESS){
 			SpySetRecordName(&(RecordList->LogRecord), &sidString);
+			RtlFreeUnicodeString(&sidString);
 		}
 
-		ExFreePool(sidString.Buffer);
+		//ExFreePoolWithTag(sidbuf, SID_TAG);
 	//}
 
     // status = PsLookupProcessByProcessId(recordData->ProcessId, PEprocess);

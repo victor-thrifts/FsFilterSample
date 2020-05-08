@@ -1059,7 +1059,7 @@ Return Value:
 --*/
 {
     FLT_PREOP_CALLBACK_STATUS returnStatus = FLT_PREOP_SUCCESS_NO_CALLBACK; //assume we are NOT going to call our completion routine
-    PRECORD_LIST recordList;
+    PRECORD_LIST recordList = NULL;
     PFLT_FILE_NAME_INFORMATION nameInfo = NULL;
     //UNICODE_STRING defaultName;
     PUNICODE_STRING nameToUse;
@@ -1129,7 +1129,7 @@ Return Value:
     //
 
     recordList = SpyNewRecord();
-    
+  
     if (recordList) {
 
         //
@@ -1348,7 +1348,7 @@ Return value
 
     PMINISPY_TRANSACTION_CONTEXT transactionContext = NULL;
     PMINISPY_TRANSACTION_CONTEXT oldTransactionContext = NULL;
-    PRECORD_LIST recordList;
+	PRECORD_LIST recordList = NULL;
     NTSTATUS status;
     static ULONG Sequence=1;
 

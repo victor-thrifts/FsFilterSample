@@ -53,6 +53,7 @@ Environment:
 #pragma alloc_text(PAGE, InstanceTeardownComplete)
 #pragma alloc_text(PAGE, IsOpenProccess)
 #pragma alloc_text(PAGE, IsProtectionFileByProtectedDirName)
+#pragma alloc_text(PAGE, IsProtectionParentDirByProtectedDirName)
 #endif
 
 
@@ -725,6 +726,40 @@ None.
 }
 
 
+void Clean_Fld_List()
+{
+	KIRQL oldIrql;
+	PFF_LIST_CONTEXT tmp = NULL;
+
+	KeAcquireSpinLock(&ff_fld_list_Lock, &oldIrql);
+
+	while (ff_fld_list){
+		tmp = ff_fld_list->head;
+		ExFreeToNPagedLookasideList(&FolderContextList, ff_fld_list);
+		ff_fld_list = tmp;
+	}
+
+	KeReleaseSpinLock(&ff_fld_list_Lock, oldIrql);
+}
+
+
+void Clean_Exe_List()
+{
+	KIRQL oldIrql;
+	PFF_LIST_CONTEXT tmp = NULL;
+
+	KeAcquireSpinLock(&ff_exe_list_Lock, &oldIrql);
+
+	while (ff_exe_list){
+		tmp = ff_exe_list->head;
+		ExFreeToNPagedLookasideList(&ExeContextList, ff_exe_list);
+		ff_exe_list = tmp;
+	}
+
+	KeReleaseSpinLock(&ff_exe_list_Lock, oldIrql);
+}
+
+
 VOID
 WriteDriverParameters()
 /*++
@@ -1042,40 +1077,6 @@ Return Value:
     return status;
 }
 
-void Clean_Fld_List()
-{
-	KIRQL oldIrql;
-	PFF_LIST_CONTEXT tmp = NULL;
-    
-	KeAcquireSpinLock(&ff_fld_list_Lock, &oldIrql);
-
-	while (ff_fld_list){
-		tmp = ff_fld_list->head;
-		ExFreeToNPagedLookasideList(&FolderContextList, ff_fld_list);
-		ff_fld_list = tmp;
-	}
-
-    KeReleaseSpinLock(&ff_fld_list_Lock, oldIrql);
-}
-
-
-void Clean_Exe_List()
-{
-	KIRQL oldIrql;
-	PFF_LIST_CONTEXT tmp = NULL;
-
-	KeAcquireSpinLock(&ff_exe_list_Lock, &oldIrql);
-
-	while (ff_exe_list){
-		tmp = ff_exe_list->head;
-		ExFreeToNPagedLookasideList(&ExeContextList, ff_exe_list);
-		ff_exe_list = tmp;
-	}
-	
-	KeReleaseSpinLock(&ff_exe_list_Lock, oldIrql);
-}
-
-
 NTSTATUS
 Unload (
     __in FLT_FILTER_UNLOAD_FLAGS Flags
@@ -1109,16 +1110,20 @@ Return Value:
 	//  Unregister from FLT mgr
 	FltUnregisterFilter(gFilterHandle);
 
-	// Clean_Exe_List();
-	// Clean_Fld_List();
-
 	// //  Delete lookaside list
-	 ExDeleteNPagedLookasideList(&Pre2PostContextList);
-	 ExDeleteNPagedLookasideList(&ExeContextList);
-	 ExDeleteNPagedLookasideList(&FolderContextList);
+
+	Clean_Exe_List();
+	Clean_Fld_List();
+
+	ExDeleteNPagedLookasideList(&Pre2PostContextList);
+	ExDeleteNPagedLookasideList(&ExeContextList);
+	ExDeleteNPagedLookasideList(&FolderContextList);
 
 	//Gobal values deletting.
 	WriteDriverParameters();
+	if (openProccess.Length > 0) ExFreePoolWithTag(openProccess.Buffer, P_PRC_TAG);
+	if (ProtectedDirName.Length > 0) ExFreePoolWithTag(ProtectedDirName.Buffer, P_DIR_TAG);
+	if (registryPath.Length > 0) ExFreePoolWithTag(registryPath.Buffer, MAX_PATH, REG_TAG);
 	return STATUS_SUCCESS;
 }
 
@@ -1524,8 +1529,9 @@ BOOLEAN IsOpenProccess()
 {
 	//KIRQL oldIrql;
 	BOOLEAN ret = FALSE;
+	NTSTATUS status;
 	FILE_ID ProcessId;
-	PUNICODE_STRING ProcessImageName;
+	UNICODE_STRING ProcessImageName;
 	PUNICODE_STRING sidString;
 	PFF_LIST_CONTEXT tmpExeList;
 	WCHAR strBuffer[(sizeof(UNICODE_STRING) + MAX_PATH*2)/sizeof(WCHAR)];
@@ -1536,11 +1542,27 @@ BOOLEAN IsOpenProccess()
 
     ProcessId  = (FILE_ID)PsGetCurrentProcessId();
 
-    ProcessImageName = (PUNICODE_STRING)strBuffer;
-    ProcessImageName->MaximumLength  = sizeof(UNICODE_STRING) + MAX_PATH*2;
-    ProcessImageName->Length = 0;
+ //   ProcessImageName = (PUNICODE_STRING)strBuffer;
+ //   ProcessImageName->MaximumLength  = MAX_PATH*2-sizeof(PVOID);
+ //   ProcessImageName->Length = 0;
+	//ProcessImageName->Buffer = strBuffer + sizeof(UNICODE_STRING);
 
-    GetProcessImageName((HANDLE)ProcessId, ProcessImageName);
+	ProcessImageName.Length = 0;
+	ProcessImageName.MaximumLength = 520;
+	ProcessImageName.Buffer = strBuffer;  // (PWSTR)ExAllocatePoolWithTag(NonPagedPool, 520, 'uUT2');
+
+	if (NULL == ProcessImageName.Buffer)
+	{
+		return ret;   //STATUS_INSUFFICIENT_RESOURCES;
+	}
+
+	status = GetProcessImageName((HANDLE)ProcessId, &ProcessImageName);
+
+	if (STATUS_SUCCESS != status)
+	{
+		//ExFreePoolWithTag(ProcessImageName.Buffer, 'uUT2');
+		return ret;
+	}
 
 	//KeAcquireSpinLock(&ff_exe_list_Lock, &oldIrql);
 	
@@ -1548,13 +1570,16 @@ BOOLEAN IsOpenProccess()
 	while(tmpExeList){
 
 		// 判断
-		if (TRUE == FsRtlIsNameInExpression(&tmpExeList->item, ProcessImageName, FALSE, NULL))
+		if (TRUE == FsRtlIsNameInExpression(&tmpExeList->item, &ProcessImageName, FALSE, NULL))
 		{
 			//GetProcessUsername();
 			ret = TRUE;
+			break;
 		}
 		tmpExeList = tmpExeList->head;
 	}
+
+	//ExFreePoolWithTag(ProcessImageName.Buffer, 'uUT2');
 
 	//KeReleaseSpinLock(&ff_exe_list_Lock, oldIrql);
 
@@ -1581,11 +1606,47 @@ BOOLEAN IsProtectionFileByProtectedDirName(PFLT_FILE_NAME_INFORMATION NameInfos)
 		if (TRUE == RtlFindSubString(&(NameInfos->Name), &tmpFldList->item))
 		{
 			bProtect = TRUE;
+			break;
 		}
 		tmpFldList = tmpFldList->head;
 	}
 
 	//KeReleaseSpinLock(&ff_fld_list_Lock, oldIrql);
+	return bProtect;
+}
+
+BOOLEAN IsProtectionParentDirByProtectedDirName(PFLT_FILE_NAME_INFORMATION NameInfos)
+{
+	BOOLEAN bProtect = FALSE;
+	PFF_LIST_CONTEXT tmpFldList;
+	UNICODE_STRING fldname;
+	wchar_t *buffer[MAX_PATH];
+
+	//KIRQL oldIrql;
+
+	PAGED_CODE();
+
+	if (IsInSetting) return bProtect;
+
+	//KeAcquireSpinLock(&ff_fld_list_Lock, &oldIrql);
+
+	tmpFldList = ff_fld_list;
+	while (tmpFldList){
+		RtlInitEmptyUnicodeString(&fldname, buffer, MAX_PATH * sizeof(WCHAR));
+		RtlCopyUnicodeString(&fldname, &NameInfos->Volume);    // 字符串拷贝！
+		RtlAppendUnicodeStringToString(&fldname, &tmpFldList->item);
+		// 判断
+		if (TRUE == RtlFindSubString(&fldname, &(NameInfos->Name)))
+		{
+			bProtect = TRUE;
+			break;
+		}
+		tmpFldList = tmpFldList->head;
+	}
+
+	//KeReleaseSpinLock(&ff_fld_list_Lock, oldIrql);
+
+
 	return bProtect;
 }
 
@@ -2120,8 +2181,9 @@ PreCreate(
 FLT_PREOP_CALLBACK_STATUS PreReNameFile(PFLT_CALLBACK_DATA Data, PCFLT_RELATED_OBJECTS FltObjects, __deref_out_opt PVOID *CompletionContext)
 {
 	NTSTATUS status;
+	BOOLEAN isDir;
 	PFILE_RENAME_INFORMATION pReNameInfo;
-	PFLT_FILE_NAME_INFORMATION NameInfo;
+	PFLT_FILE_NAME_INFORMATION NameInfo, NameInfo1;
 
 	pReNameInfo = (PFILE_RENAME_INFORMATION)Data->Iopb->Parameters.SetFileInformation.InfoBuffer;
 
@@ -2131,12 +2193,60 @@ FLT_PREOP_CALLBACK_STATUS PreReNameFile(PFLT_CALLBACK_DATA Data, PCFLT_RELATED_O
 		pReNameInfo->FileName,
 		pReNameInfo->FileNameLength,
 		FLT_FILE_NAME_NORMALIZED,
-		&NameInfo);
+		&NameInfo1);
 
 	if (!NT_SUCCESS(status))
 	{
 		KdPrint(("Get Destination Name Fail!\n"));
 		return FLT_PREOP_SUCCESS_NO_CALLBACK;
+	}
+
+	if (TRUE == IsProtectionFile(NameInfo1))																//禁止出现对应名称的文件Rename。								
+	{
+		if (IsOpenProccess())
+		{
+			FltReleaseFileNameInformation(NameInfo1);
+			return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
+		}
+		else
+		{
+			Data->IoStatus.Status = STATUS_ACCESS_DENIED;
+			Data->IoStatus.Information = 0;
+			FltReleaseFileNameInformation(NameInfo1);
+			return FLT_PREOP_COMPLETE;
+		}
+	}
+
+	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED
+		| FLT_FILE_NAME_QUERY_DEFAULT, &NameInfo);
+
+	if (!NT_SUCCESS(status))
+	{
+		KdPrint(("Query Name Fail!\n"));
+		return FLT_PREOP_SUCCESS_NO_CALLBACK;
+	}
+
+	status = FltIsDirectory(FltObjects->FileObject, FltObjects->Instance, &isDir);
+	if (!NT_SUCCESS(status))
+	{
+		return FLT_PREOP_SUCCESS_NO_CALLBACK;
+	}
+
+	if (isDir){
+		if (TRUE == IsProtectionParentDirByProtectedDirName(NameInfo)){
+			if (IsOpenProccess())
+			{
+				FltReleaseFileNameInformation(NameInfo);
+				return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
+			}
+			else
+			{
+				Data->IoStatus.Status = STATUS_ACCESS_DENIED;
+				Data->IoStatus.Information = 0;
+				FltReleaseFileNameInformation(NameInfo);
+				return FLT_PREOP_COMPLETE;
+			}
+		}
 	}
 
 	if (TRUE == IsProtectionFile(NameInfo))																//禁止出现对应名称的文件Rename。								
@@ -2159,6 +2269,7 @@ FLT_PREOP_CALLBACK_STATUS PreReNameFile(PFLT_CALLBACK_DATA Data, PCFLT_RELATED_O
 	//	return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
 
 	FltReleaseFileNameInformation(NameInfo);
+	FltReleaseFileNameInformation(NameInfo1);
 	//return SpyPreOperationCallback(Data, FltObjects, CompletionContext);
 	return FLT_PREOP_SUCCESS_NO_CALLBACK;
 }
@@ -2169,11 +2280,11 @@ FLT_PREOP_CALLBACK_STATUS PreDeleteFile(PFLT_CALLBACK_DATA Data, PCFLT_RELATED_O
 	BOOLEAN isDir;
 	PFLT_FILE_NAME_INFORMATION NameInfo;
 
-	status = FltIsDirectory(FltObjects->FileObject, FltObjects->Instance, &isDir);
-	if (!NT_SUCCESS(status))
-	{
-		return FLT_PREOP_SUCCESS_NO_CALLBACK;
-	}
+	//status = FltIsDirectory(FltObjects->FileObject, FltObjects->Instance, &isDir);
+	//if (!NT_SUCCESS(status))
+	//{
+	//	return FLT_PREOP_SUCCESS_NO_CALLBACK;
+	//}
 
 	//if (isDir)
 	//	return FLT_PREOP_SUCCESS_NO_CALLBACK;					//这里代表如果是文件夹，就不去管它。
@@ -2331,7 +2442,6 @@ PUNICODE_STRING GetOpenProccess()
 	return &openProccess;
 }
 
-//重启计算机(强制)
 VOID 
 CompuleReBoot(void)
 {
@@ -2344,7 +2454,6 @@ CompuleReBoot(void)
 	return;
 }  
 
-//关闭计算机(强制)
 VOID 
 CompuleShutdown(void)
 {
@@ -2372,6 +2481,8 @@ VOID SetProtectionFolder(PUNICODE_STRING dir)
 	Clean_Fld_List();
 	ParseProtectionDir(dir);
 	IsInSetting = FALSE;
+IOCTL_SHUTDOWN_NOREBOOT:
+	WriteDriverParameters();
 	return;
 }
 
@@ -2400,6 +2511,7 @@ VOID SetOpenProccess(PUNICODE_STRING test)
 	IsInSetting = FALSE;
 	//NtShutdownSystem(ShutdownReboot); 
 IOCTL_SHUTDOWN_NOREBOOT:
+	WriteDriverParameters();
 	return;
 }
 
