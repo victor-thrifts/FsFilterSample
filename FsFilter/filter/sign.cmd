@@ -4,7 +4,7 @@ pvk2pfx.exe /pvk fsfilter.pvk /spc fsfilter.cer /pfx fsfilter.pfx
 CertMgr /add filter.cer /s /r localMachine root
 CertMgr /add filter.cer /s /r localMachine trustedpublisher
 
-stampinf -f fsfilter.inf -d 09/01/2019 -v 1.0.0
+stampinf -f fsfilter.inf -d 09/01/2020 -v 1.0.0
 Inf2cat.exe /driver:objchk_win7_amd64\amd64 /os:7_X64
 
 

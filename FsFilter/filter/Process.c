@@ -30,11 +30,12 @@ PsGetProcessImageFileName(
 
 NTSTATUS GetCurrentProcessName()
 {
-	WCHAR strBuffer[(sizeof(UNICODE_STRING) + MAX_PATH*2)/sizeof(WCHAR)];
+	WCHAR strBuffer[sizeof(UNICODE_STRING) + MAX_PATH];
 	PUNICODE_STRING str = (PUNICODE_STRING)strBuffer;
     PEPROCESS proc;
     NTSTATUS status;
 
+	status = STATUS_UNSUCCESSFUL;
 
 	if (NULL == ZwQueryInformationProcess) {
 
@@ -45,29 +46,33 @@ NTSTATUS GetCurrentProcessName()
 		ZwQueryInformationProcess =
 			   (QUERY_INFO_PROCESS) MmGetSystemRoutineAddress(&routineName);
 
-		if (NULL == ZwQueryInformationProcess) {
-			DbgPrint("Cannot resolve ZwQueryInformationProcess\n");
+	}
+
+	if (NULL == ZwQueryInformationProcess) {
+		DbgPrint("Cannot resolve ZwQueryInformationProcess\n");
+	}
+	else
+	{
+		proc = PsGetCurrentProcess();
+		DbgPrint("ZwOpenFile Called...\n");
+		DbgPrint("PID: %d\n", PsGetProcessId(proc));
+		DbgPrint("ImageFileName: %.16s\n", PsGetProcessImageFileName(proc));
+
+		//initialize
+		str->Length = 0x0;
+		str->MaximumLength = MAX_PATH * 2;
+		str->Buffer = &strBuffer[sizeof(UNICODE_STRING)  / sizeof(CHAR) ];
+
+		//note that the seconds arg (27) is ProcessImageFileName
+		status = ZwQueryInformationProcess(proc, 27, strBuffer, sizeof(strBuffer), NULL);
+		if (status == STATUS_SUCCESS) {
+			DbgPrint("FullPath: %wZ\n", str->Buffer);
+		}
+		else {
+			DbgPrint("ZwQueryInformationProcess failed! \n");
 		}
 	}
 
-	proc = PsGetCurrentProcess();
-	DbgPrint("ZwOpenFile Called...\n");
-	DbgPrint("PID: %d\n", PsGetProcessId(proc));
-	DbgPrint("ImageFileName: %.16s\n", PsGetProcessImageFileName(proc));
-
-	//initialize
-	str->Length = 0x0;
-	str->MaximumLength = MAX_PATH*2;
-	str->Buffer = &strBuffer[sizeof(UNICODE_STRING) / sizeof(WCHAR)];
-
-
-	//note that the seconds arg (27) is ProcessImageFileName
-	status = ZwQueryInformationProcess(proc, 27, strBuffer, sizeof(strBuffer), NULL);
-    if(status == STATUS_SUCCESS){
-        DbgPrint("FullPath: %wZ\n", str->Buffer);
-    }else{
-        DbgPrint("ZwQueryInformationProcess failed! \n");
-    }
 	return status;
 }
 
@@ -109,40 +114,43 @@ NTSTATUS GetProcessImageName(HANDLE processId, PUNICODE_STRING ProcessImageName)
 		ZwQueryInformationProcess =
 			   (QUERY_INFO_PROCESS) MmGetSystemRoutineAddress(&routineName);
 
-		if (NULL == ZwQueryInformationProcess) {
-			DbgPrint("Cannot resolve ZwQueryInformationProcess\n");
-		}
 	}
 
-	status = ZwQueryInformationProcess(hProcess,
-		ProcessImageFileName,
-		NULL, // buffer
-		0, // buffer size
-		&returnedLength);
-
-	if (STATUS_INFO_LENGTH_MISMATCH != status) {
-		return status;
+	if (NULL == ZwQueryInformationProcess) {
+		DbgPrint("Cannot resolve ZwQueryInformationProcess\n");
 	}
-
-	/* Check there is enough space to store the actual process
-	path when it is found. If not return an error with the
-	required size */
-	bufferLength = returnedLength - sizeof(UNICODE_STRING);
-
-	if (bufferLength == 0) return STATUS_UNSUCCESSFUL;
-
-	if (ProcessImageName->MaximumLength < bufferLength)
+	else
 	{
-		//ProcessImageName->MaximumLength = (USHORT) bufferLength;
-		return STATUS_BUFFER_OVERFLOW;
-	}
+		status = ZwQueryInformationProcess(hProcess,
+			ProcessImageFileName,
+			NULL, // buffer
+			0, // buffer size
+			&returnedLength);
 
-	/* Query the actual size of the process path */
-	status = ZwQueryInformationProcess( hProcess,
-										ProcessImageFileName,
-										ProcessImageName, // buffer
-										ProcessImageName->MaximumLength, // buffer size
-										&returnedLength);
+		if (STATUS_INFO_LENGTH_MISMATCH != status) {
+			return status;
+		}
+
+		/* Check there is enough space to store the actual process
+		path when it is found. If not return an error with the
+		required size */
+		bufferLength = returnedLength - sizeof(UNICODE_STRING);
+
+		if (bufferLength == 0) return STATUS_UNSUCCESSFUL;
+
+		if (ProcessImageName->MaximumLength < bufferLength)
+		{
+			//ProcessImageName->MaximumLength = (USHORT) bufferLength;
+			return STATUS_BUFFER_OVERFLOW;
+		}
+
+		/* Query the actual size of the process path */
+		status = ZwQueryInformationProcess(hProcess,
+			ProcessImageFileName,
+			ProcessImageName, // buffer
+			returnedLength, // buffer size
+			&returnedLength);
+	}
 
 	ZwClose(hProcess);
 
@@ -178,23 +186,25 @@ NTSTATUS GetCurrentThreadImageName(PFLT_CALLBACK_DATA Data,  PUNICODE_STRING Pro
 }
 
 
-UNICODE_STRING *GetProcessUsername()
+UNICODE_STRING GetProcessUsername()
 {
 	HANDLE token;
-	TOKEN_USER* TokenUser = NULL;
+	//TOKEN_USER* TokenUser = NULL;
 	NTSTATUS status;
 	//PULONG len;
 	//int index;
 	//SID *sid;
 	LUID luid;
 	UNICODE_STRING userName;
+	userName.MaximumLength = 0;
+	userName.Length = 0;
 	PSecurityUserData userInformation = NULL;
 	status = ZwOpenProcessTokenEx(NtCurrentProcess(), GENERIC_READ, OBJ_KERNEL_HANDLE, &token);
 	//ZwQueryInformationToken(token, (TOKEN_INFORMATION_CLASS)TokenUser, NULL, 0, &len); //to get required length
 	if (!NT_SUCCESS(status))
 	{
 		KdPrint(("ZwOpenProcessTokenEx(): ZwOpenProcessTokenEx fail\n"));
-		return NULL;
+		return userName;
 	}
 
 	//sid= (SID*)TokenUser->User.Sid;
@@ -205,7 +215,7 @@ UNICODE_STRING *GetProcessUsername()
 	{
 		KdPrint(("SeQueryAuthenticationIdToken(): SeQueryAuthenticationIdToken fail\n"));
 		ZwClose(token);
-		return NULL;
+		return userName;
 	}
 	ZwClose(token);
 	status = STATUS_UNSUCCESSFUL;
@@ -213,7 +223,7 @@ UNICODE_STRING *GetProcessUsername()
 	if (!NT_SUCCESS(status))
 	{
 		KdPrint(("GetSecurityUserInfo(): GetSecurityUserInfo fail\n"));
-		return NULL;
+		return userName;
 	}
 	userName.Length = 0;
 	userName.MaximumLength = userInformation->UserName.Length;
@@ -221,11 +231,11 @@ UNICODE_STRING *GetProcessUsername()
 	if (userName.Buffer == NULL)
 	{
 		KdPrint(("GetUserName(): ExAllocatePool fail\n"));
-		return NULL;
+		return userName;
 	}
 
 	RtlCopyUnicodeString(&userName, &userInformation->UserName);
-	return &userName;
+	return userName;
 }
 
 NTSTATUS
@@ -237,14 +247,14 @@ GetSID(__deref_out PUNICODE_STRING sidString, PACCESS_STATE AccessState)
 	PTOKEN_USER tokenInfoBuffer;
 	ULONG requiredLength;
 	//PWCHAR sidStringBuffer;
-	UNICODE_STRING nameString;
-	UNICODE_STRING domainString;
-	WCHAR* nameBuffer;
-	WCHAR* domainBuffer;
-	SID_NAME_USE nameUse = SidTypeUser;
-	ULONG nameSize = 0;
-	ULONG domainSize = 0;
-	ULONG SIDLength;
+	//UNICODE_STRING nameString;
+	//net sUNICODE_STRING domainString;
+	//WCHAR* nameBuffer;
+	//WCHAR* domainBuffer;
+	//SID_NAME_USE nameUse = SidTypeUser;
+	//ULONG nameSize = 0;
+	//ULONG domainSize = 0;
+	//ULONG SIDLength;
 	TOKEN_USER tokenuser;
 	SID_AND_ATTRIBUTES tokenuser_user = { 0 };
 	WCHAR sid[512] = { 0 };
@@ -310,7 +320,7 @@ GetSID(__deref_out PUNICODE_STRING sidString, PACCESS_STATE AccessState)
 
 
 	//
-	// Got it, now convert to text representation
+	// Got it, now convert to text represidStringsentation
 	//
 	ntStatus = RtlConvertSidToUnicodeString(sidString, tokenInfoBuffer->User.Sid, TRUE);
 	if (STATUS_SUCCESS!=ntStatus)
@@ -319,8 +329,11 @@ GetSID(__deref_out PUNICODE_STRING sidString, PACCESS_STATE AccessState)
 		ExFreePoolWithTag(tokenInfoBuffer, 'pmt_');
 		return STATUS_FAIL_CHECK;
 	}
-	ASSERT(sidString->MaximumLength > sidString->Length);
-	sidString->Buffer[sidString->Length] = L'\0';
+	if (sidString->MaximumLength - sidString->Length >= sizeof(WCHAR)) {
+
+		sidString->Buffer[(sidString->Length)] = '\0';
+	}
+
 	//KdPrint(("\nGetSID: sidString = %ws\n", sidString->Buffer));
 
 	//SIDLength = RtlLengthSid(tokenInfoBuffer->User.Sid);

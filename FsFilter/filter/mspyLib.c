@@ -446,11 +446,11 @@ Return Value:
     PDEVICE_OBJECT devObj;
     NTSTATUS status;
     PUNICODE_STRING ProcessImageName;
-    WCHAR strBuffer[(sizeof(UNICODE_STRING) + MAX_PATH*2)/sizeof(WCHAR)];
+    WCHAR strBuffer[sizeof(UNICODE_STRING) + MAX_PATH];
     //PEPROCESS *PEprocess = NULL;
 
 	PACCESS_STATE AccessState;
-	WCHAR* sidbuf;
+	//WCHAR* sidbuf;
 	UNICODE_STRING sidString;
 
     status = FltGetDeviceObject(FltObjects->Volume,&devObj);
@@ -478,7 +478,7 @@ Return Value:
     recordData->ProcessId       = (FILE_ID)PsGetCurrentProcessId();
 
     ProcessImageName = (PUNICODE_STRING)strBuffer;
-	ProcessImageName->MaximumLength = MAX_PATH * 2 - sizeof(PVOID);
+	ProcessImageName->MaximumLength = MAX_PATH * sizeof(WCHAR);
     ProcessImageName->Length = 0;
 	ProcessImageName->Buffer = strBuffer + sizeof(UNICODE_STRING);
 
@@ -578,7 +578,8 @@ Return Value:
 	{
 		RecordList->LogRecord.Data.Reserved[0] = 'D';
 	}
-    else if( Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformation )
+    else if( Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformation ||
+             Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformationEx )
     {
 		if (Data->IoStatus.Information & FILE_DOES_NOT_EXIST)
 		{

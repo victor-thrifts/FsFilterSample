@@ -153,7 +153,7 @@ KSPIN_LOCK ff_exe_list_Lock;
 PFF_LIST_CONTEXT ff_fld_list = NULL;
 KSPIN_LOCK ff_fld_list_Lock;
 
-IsInSetting = FALSE;
+BOOLEAN IsInSetting = FALSE;
 
 #define MAX_FF_LIST_SIZE 512
 
@@ -435,7 +435,7 @@ WCHAR* DumpNameCxtLine(__in WCHAR* Name,  __inout WCHAR* line, __inout size_t *l
 		line[*length] = UNICODE_NULL;
 		return NULL;
 	}
-    if((ptr-Name)*2>*length)
+    if((ptr-Name)*2>(int)(*length))
     {
 		RtlCopyMemory(line, Name, *length - 1);
     }else{
@@ -447,7 +447,7 @@ WCHAR* DumpNameCxtLine(__in WCHAR* Name,  __inout WCHAR* line, __inout size_t *l
     return ptr+1;
 }
 
-ParseOpenProcess(PUNICODE_STRING openprocess)
+void ParseOpenProcess(PUNICODE_STRING openprocess)
 {
 	size_t llen;
 	WCHAR pline[MAX_PATH];
@@ -471,10 +471,10 @@ ParseOpenProcess(PUNICODE_STRING openprocess)
 			return;
 		}
 		newBuffer = (PFF_LIST_CONTEXT)ExAllocateFromNPagedLookasideList(&ExeContextList);
-		newBuffer->item.Buffer = (char*)newBuffer + FIELD_OFFSET(FF_LIST_CONTEXT, item.Buffer) + sizeof(PVOID);
+		newBuffer->item.Buffer = (WCHAR*)newBuffer + (FIELD_OFFSET(FF_LIST_CONTEXT, item.Buffer) + sizeof(PVOID))/sizeof(CHAR);
 		newBuffer->item.MaximumLength = MAX_FF_LIST_SIZE - sizeof(FF_LIST_CONTEXT) - sizeof(PVOID);
 		ASSERT(llen * 2 < newBuffer->item.MaximumLength - 3);
-		newBuffer->item.Length = (llen+1) * 2;
+		newBuffer->item.Length = (USHORT)(llen+1) * sizeof(WCHAR);
 		newBuffer->item.Buffer[0] = L'*';
 		RtlCopyMemory(++(newBuffer->item.Buffer), pline, llen*2);
 		newBuffer->item.Buffer[newBuffer->item.Length] = UNICODE_NULL;
@@ -495,7 +495,7 @@ ParseOpenProcess(PUNICODE_STRING openprocess)
 }
 
 
-ParseProtectionDir(PUNICODE_STRING dirs){
+void ParseProtectionDir(PUNICODE_STRING dirs){
 	size_t llen;
 	KIRQL oldIrql;
 	WCHAR pline[MAX_PATH];
@@ -518,10 +518,10 @@ ParseProtectionDir(PUNICODE_STRING dirs){
 			return;
 		}
 		newBuffer = (PFF_LIST_CONTEXT)ExAllocateFromNPagedLookasideList(&ExeContextList);
-		newBuffer->item.Buffer = (char*)newBuffer + FIELD_OFFSET(FF_LIST_CONTEXT, item.Buffer) + sizeof(PVOID);
+		newBuffer->item.Buffer = (WCHAR*)newBuffer + (FIELD_OFFSET(FF_LIST_CONTEXT, item.Buffer) + sizeof(PVOID))/sizeof(CHAR);
 		newBuffer->item.MaximumLength = MAX_FF_LIST_SIZE - sizeof(FF_LIST_CONTEXT) - sizeof(PVOID);
 		ASSERT(llen * 2 < newBuffer->item.MaximumLength-1);
-		newBuffer->item.Length = llen * 2;
+		newBuffer->item.Length = (USHORT)llen * 2;
 		RtlCopyMemory(newBuffer->item.Buffer, pline, llen * 2);
 		newBuffer->item.Buffer[newBuffer->item.Length] = UNICODE_NULL;
 
@@ -610,8 +610,8 @@ None.
 
 	if(STATUS_OBJECT_NAME_NOT_FOUND == status || STATUS_INVALID_PARAMETER == status) return;
 
-	if( STATUS_BUFFER_OVERFLOW == status || STATUS_BUFFER_TOO_SMALL == status ) {
-		
+	if (STATUS_BUFFER_OVERFLOW == status || STATUS_BUFFER_TOO_SMALL == status) {
+
 		//
 		//  Allocate nonPaged memory for the buffer we are swapping to.
 		//  If we fail to get the memory, just don't swap buffers on this
@@ -620,34 +620,37 @@ None.
 
 		pValuePartialInfo = ExAllocatePoolWithTag(NonPagedPool, resultLength, DBG_TAG);
 		if (pValuePartialInfo == NULL) {
-			LOG_PRINT(LOGFL_ERRORS, 
+			LOG_PRINT(LOGFL_ERRORS,
 				("fsFilter!ExAllocatePoolWithTag-protecteddirname: Failed to allocate %d bytes of memory\n", resultLength));
 			return;
-		}	
+		}
+
+
+		status = ZwQueryValueKey(driverRegKey,
+			&valueName,
+			KeyValuePartialInformation,
+			pValuePartialInfo,
+			resultLength,
+			&resultLength);
+
+		if (NT_SUCCESS(status)) {
+
+			ASSERT(pValuePartialInfo->Type == REG_SZ);
+			buffer = ExAllocatePoolWithTag(NonPagedPool, pValuePartialInfo->DataLength + sizeof(UNICODE_NULL), P_DIR_TAG);
+			RtlCopyMemory(buffer, pValuePartialInfo->Data, pValuePartialInfo->DataLength);
+			buffer[pValuePartialInfo->DataLength / sizeof(UNICODE_NULL)] = UNICODE_NULL;
+			RtlInitUnicodeString(&ProtectedDirName, buffer);
+		}
+		else {
+			buffer = ExAllocatePoolWithTag(NonPagedPool, DEFAULTPROTECTIONDIRNAME.Length + sizeof(UNICODE_NULL), P_DIR_TAG);
+			RtlCopyMemory(buffer, DEFAULTPROTECTIONDIRNAME.Buffer, DEFAULTPROTECTIONDIRNAME.Length);
+			buffer[DEFAULTPROTECTIONDIRNAME.Length / sizeof(UNICODE_NULL)] = UNICODE_NULL;
+			RtlInitUnicodeString(&ProtectedDirName, buffer);
+		}
+
+		ExFreePoolWithTag(pValuePartialInfo, DBG_TAG);
+
 	}
-
-	status = ZwQueryValueKey( driverRegKey,
-                              &valueName,
-                              KeyValuePartialInformation,
-                              pValuePartialInfo,
-                              resultLength,
-                              &resultLength );	
-
-    if (NT_SUCCESS( status )) {
-
-        ASSERT( pValuePartialInfo->Type == REG_SZ );
-		buffer = ExAllocatePoolWithTag(NonPagedPool, pValuePartialInfo->DataLength + sizeof(UNICODE_NULL), P_DIR_TAG);
-		RtlCopyMemory(buffer, pValuePartialInfo->Data, pValuePartialInfo->DataLength);
-		buffer[pValuePartialInfo->DataLength/sizeof(UNICODE_NULL)] = UNICODE_NULL;
-		RtlInitUnicodeString(&ProtectedDirName, buffer);
-    } else {
-		buffer = ExAllocatePoolWithTag(NonPagedPool, DEFAULTPROTECTIONDIRNAME.Length + sizeof(UNICODE_NULL), P_DIR_TAG);
-		RtlCopyMemory(buffer, DEFAULTPROTECTIONDIRNAME.Buffer, DEFAULTPROTECTIONDIRNAME.Length);
-		buffer[DEFAULTPROTECTIONDIRNAME.Length/sizeof(UNICODE_NULL)] = UNICODE_NULL;
-		RtlInitUnicodeString(&ProtectedDirName, buffer);
-	}
-
-	ExFreePoolWithTag(pValuePartialInfo, DBG_TAG);
 
 	DbgPrint("\n ProtectedDirName is %S\n", ProtectedDirName.Buffer);
 
@@ -667,8 +670,8 @@ None.
 
 	if(STATUS_OBJECT_NAME_NOT_FOUND == status || STATUS_INVALID_PARAMETER == status) return;
 
-	if( STATUS_BUFFER_OVERFLOW == status || STATUS_BUFFER_TOO_SMALL == status ) {
-		
+	if (STATUS_BUFFER_OVERFLOW == status || STATUS_BUFFER_TOO_SMALL == status) {
+
 		//
 		//  Allocate nonPaged memory for the buffer we are swapping to.
 		//  If we fail to get the memory, just don't swap buffers on this
@@ -677,35 +680,36 @@ None.
 
 		pValuePartialInfo = ExAllocatePoolWithTag(NonPagedPool, resultLength, DBG_TAG);
 		if (pValuePartialInfo == NULL) {
-			LOG_PRINT(LOGFL_ERRORS, 
+			LOG_PRINT(LOGFL_ERRORS,
 				("fsFilter!ExAllocatePoolWithTag-openProccess: Failed to allocate %d bytes of memory\n", resultLength));
 			return;
-		}	
+		}
+
+
+		status = ZwQueryValueKey(driverRegKey,
+			&valueName,
+			KeyValuePartialInformation,
+			pValuePartialInfo,
+			resultLength,
+			&resultLength);
+
+		if (NT_SUCCESS(status)) {
+
+			ASSERT(pValuePartialInfo->Type == REG_SZ);
+			buffer1 = ExAllocatePoolWithTag(NonPagedPool, pValuePartialInfo->DataLength + sizeof(UNICODE_NULL), P_PRC_TAG);
+			RtlCopyMemory(buffer1, pValuePartialInfo->Data, pValuePartialInfo->DataLength);
+			buffer1[pValuePartialInfo->DataLength / sizeof(UNICODE_NULL)] = UNICODE_NULL;
+			RtlInitUnicodeString(&openProccess, buffer1);
+		}
+		else {
+			buffer1 = ExAllocatePoolWithTag(NonPagedPool, DEFAULTOPENPROCCESS.Length + sizeof(UNICODE_NULL), P_PRC_TAG);
+			RtlCopyMemory(buffer1, DEFAULTOPENPROCCESS.Buffer, DEFAULTOPENPROCCESS.Length);
+			buffer1[DEFAULTOPENPROCCESS.Length / sizeof(UNICODE_NULL)] = UNICODE_NULL;
+			RtlInitUnicodeString(&openProccess, buffer1);
+		}
+
+		ExFreePoolWithTag(pValuePartialInfo, DBG_TAG);
 	}
-
-	status = ZwQueryValueKey( driverRegKey,
-							&valueName,
-							KeyValuePartialInformation,
-							pValuePartialInfo,
-							resultLength,
-							&resultLength );	
-
-    if (NT_SUCCESS( status )) {
-
-        ASSERT( pValuePartialInfo->Type == REG_SZ );
-		buffer1 = ExAllocatePoolWithTag(NonPagedPool, pValuePartialInfo->DataLength + sizeof(UNICODE_NULL), P_PRC_TAG);
-		RtlCopyMemory(buffer1, pValuePartialInfo->Data, pValuePartialInfo->DataLength);
-		buffer1[pValuePartialInfo->DataLength/sizeof(UNICODE_NULL)] = UNICODE_NULL;
-		RtlInitUnicodeString(&openProccess, buffer1);
-    } else {
-		buffer1 = ExAllocatePoolWithTag(NonPagedPool, DEFAULTOPENPROCCESS.Length + sizeof(UNICODE_NULL), P_PRC_TAG);
-		RtlCopyMemory(buffer1, DEFAULTOPENPROCCESS.Buffer, DEFAULTOPENPROCCESS.Length);
-		buffer1[DEFAULTOPENPROCCESS.Length/sizeof(UNICODE_NULL)] = UNICODE_NULL;
-		RtlInitUnicodeString(&openProccess, buffer1);
-	}
-
-	ExFreePoolWithTag(pValuePartialInfo, DBG_TAG);
-
 	//
 	// RegisterPath 
 	//
@@ -1123,7 +1127,7 @@ Return Value:
 	WriteDriverParameters();
 	if (openProccess.Length > 0) ExFreePoolWithTag(openProccess.Buffer, P_PRC_TAG);
 	if (ProtectedDirName.Length > 0) ExFreePoolWithTag(ProtectedDirName.Buffer, P_DIR_TAG);
-	if (registryPath.Length > 0) ExFreePoolWithTag(registryPath.Buffer, MAX_PATH, REG_TAG);
+	if (registryPath.Length > 0) ExFreePoolWithTag(registryPath.Buffer, REG_TAG);
 	return STATUS_SUCCESS;
 }
 
@@ -1475,7 +1479,7 @@ otherwise.
 {
 	USHORT index;
 	//KSPIN_LOCK compareLock;
-	KIRQL oldIrql;
+	//KIRQL oldIrql;
 	BOOLEAN ret = FALSE;
 
     //KeAcquireSpinLock(&compareLock, &oldIrql);
@@ -1528,35 +1532,37 @@ BOOLEAN IsProtectionFileByProtectedFilExt(PFLT_FILE_NAME_INFORMATION NameInfos)
 BOOLEAN IsOpenProccess()
 {
 	//KIRQL oldIrql;
-	BOOLEAN ret = FALSE;
+	BOOLEAN ret;
 	NTSTATUS status;
 	FILE_ID ProcessId;
-	UNICODE_STRING ProcessImageName;
-	PUNICODE_STRING sidString;
+	PUNICODE_STRING ProcessImageName;
+	//PUNICODE_STRING sidString;
 	PFF_LIST_CONTEXT tmpExeList;
-	WCHAR strBuffer[(sizeof(UNICODE_STRING) + MAX_PATH*2)/sizeof(WCHAR)];
+	WCHAR strBuffer[sizeof(UNICODE_STRING) + MAX_PATH];
 
 	PAGED_CODE();
+
+	ret = FALSE;
 
 	if(IsInSetting) return ret;
 
     ProcessId  = (FILE_ID)PsGetCurrentProcessId();
 
- //   ProcessImageName = (PUNICODE_STRING)strBuffer;
- //   ProcessImageName->MaximumLength  = MAX_PATH*2-sizeof(PVOID);
- //   ProcessImageName->Length = 0;
-	//ProcessImageName->Buffer = strBuffer + sizeof(UNICODE_STRING);
+    ProcessImageName = (PUNICODE_STRING)strBuffer;
+    ProcessImageName->MaximumLength  = MAX_PATH*sizeof(WCHAR);
+    ProcessImageName->Length = 0;
+    ProcessImageName->Buffer = strBuffer + sizeof(UNICODE_STRING)/sizeof(CHAR);
 
-	ProcessImageName.Length = 0;
-	ProcessImageName.MaximumLength = 520;
-	ProcessImageName.Buffer = strBuffer;  // (PWSTR)ExAllocatePoolWithTag(NonPagedPool, 520, 'uUT2');
+	//ProcessImageName.Length = 0;
+	//ProcessImageName.MaximumLength = (sizeof(UNICODE_STRING) + MAX_PATH * 2) / sizeof(WCHAR);
+	//ProcessImageName.Buffer = strBuffer;  // (PWSTR)ExAllocatePoolWithTag(NonPagedPool, 520, 'uUT2');
 
-	if (NULL == ProcessImageName.Buffer)
-	{
-		return ret;   //STATUS_INSUFFICIENT_RESOURCES;
-	}
+	//if (NULL == ProcessImageName.Buffer)
+	//{
+	//	return ret;   //STATUS_INSUFFICIENT_RESOURCES;
+	//}
 
-	status = GetProcessImageName((HANDLE)ProcessId, &ProcessImageName);
+	status = GetProcessImageName((HANDLE)ProcessId, ProcessImageName);
 
 	if (STATUS_SUCCESS != status)
 	{
@@ -1570,7 +1576,7 @@ BOOLEAN IsOpenProccess()
 	while(tmpExeList){
 
 		// 判断
-		if (TRUE == FsRtlIsNameInExpression(&tmpExeList->item, &ProcessImageName, FALSE, NULL))
+		if (TRUE == FsRtlIsNameInExpression(&tmpExeList->item, ProcessImageName, FALSE, NULL))
 		{
 			//GetProcessUsername();
 			ret = TRUE;
@@ -1620,7 +1626,7 @@ BOOLEAN IsProtectionParentDirByProtectedDirName(PFLT_FILE_NAME_INFORMATION NameI
 	BOOLEAN bProtect = FALSE;
 	PFF_LIST_CONTEXT tmpFldList;
 	UNICODE_STRING fldname;
-	wchar_t *buffer[MAX_PATH];
+	wchar_t buffer[MAX_PATH];
 
 	//KIRQL oldIrql;
 
@@ -2081,7 +2087,7 @@ PreCreate(
 	__deref_out_opt PVOID *CompletionContext
 ) {
 	NTSTATUS status;
-	ULONG CreatePosition;
+	ULONG CreateDisPosition;
 	ULONG CreateOptions;
 	ULONG Position;
 	PFLT_FILE_NAME_INFORMATION NameInfo;
@@ -2100,18 +2106,19 @@ PreCreate(
 	//ExFreePool(sidString.Buffer);
 
 
-	UNREFERENCED_PARAMETER(CompletionContext);
-	UNREFERENCED_PARAMETER(FltObjects);
+	//UNREFERENCED_PARAMETER(CompletionContext);
+	//UNREFERENCED_PARAMETER(FltObjects);
 
 	Position = Data->Iopb->Parameters.Create.Options;
 	//经过反复检验发现，Create.Options的分布是这样子的，第一字节是create disposition values，后面三个字节是option flags
-	CreateOptions = Data->Iopb->Parameters.Create.Options;
-	CreatePosition = (CreateOptions >> 24) & 0xFF;
+	CreateOptions = Position & 0x00FFFFFF;
+	CreateDisPosition = (Position >> 24) & 0xFF;
+	if(FILE_SHARE_DELETE == Data->Iopb->Parameters.Create.ShareAccess){}
 
 	//if (Position & FILE_DIRECTORY_FILE)
 	//	return FLT_PREOP_SUCCESS_NO_CALLBACK;								//如果发现是文件夹选项直接返回
 
-	// if (CreatePosition == FILE_OPEN)
+	// if (CreateDisPosition == FILE_OPEN)
 	// 	return FLT_PREOP_SUCCESS_NO_CALLBACK;								//如果是FILE_OPEN打开文件，直接返回
 
 	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED | FLT_FILE_NAME_QUERY_DEFAULT, &NameInfo);
@@ -2151,7 +2158,7 @@ PreCreate(
 	}
 
 	//如果这里出现了****IF代表如果存在则****，否则创建，所以需要先判断是否存在，如果存在则不在过滤范围，否则就是过滤范围内了。
-	if (CreatePosition == FILE_OPEN_IF || CreatePosition == FILE_OVERWRITE_IF)						
+	if (CreateDisPosition == FILE_OPEN_IF || CreateDisPosition == FILE_OVERWRITE_IF )   
 	{
 		//KdPrint(("FILE_OPEN_IF OR FILE_OVERWRITE_IF\n"));
 		if (NT_SUCCESS(JudgeFileExist(&NameInfo->Name)))
@@ -2192,7 +2199,7 @@ FLT_PREOP_CALLBACK_STATUS PreReNameFile(PFLT_CALLBACK_DATA Data, PCFLT_RELATED_O
 		pReNameInfo->RootDirectory,
 		pReNameInfo->FileName,
 		pReNameInfo->FileNameLength,
-		FLT_FILE_NAME_NORMALIZED,
+		FLT_FILE_NAME_NORMALIZED | FLT_FILE_NAME_QUERY_DEFAULT,
 		&NameInfo1);
 
 	if (!NT_SUCCESS(status))
@@ -2280,14 +2287,14 @@ FLT_PREOP_CALLBACK_STATUS PreDeleteFile(PFLT_CALLBACK_DATA Data, PCFLT_RELATED_O
 	BOOLEAN isDir;
 	PFLT_FILE_NAME_INFORMATION NameInfo;
 
-	//status = FltIsDirectory(FltObjects->FileObject, FltObjects->Instance, &isDir);
-	//if (!NT_SUCCESS(status))
-	//{
-	//	return FLT_PREOP_SUCCESS_NO_CALLBACK;
-	//}
+	status = FltIsDirectory(FltObjects->FileObject, FltObjects->Instance, &isDir);
+	if (!NT_SUCCESS(status))
+	{
+		return FLT_PREOP_SUCCESS_NO_CALLBACK;
+	}
 
-	//if (isDir)
-	//	return FLT_PREOP_SUCCESS_NO_CALLBACK;					//这里代表如果是文件夹，就不去管它。
+	if (isDir)
+		return FLT_PREOP_SUCCESS_NO_CALLBACK;					//这里代表如果是文件夹，就不去管它。
 
 	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED
 		| FLT_FILE_NAME_QUERY_DEFAULT, &NameInfo);
@@ -2346,6 +2353,10 @@ PreSetInformation(
 	else if (Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformation)				//删除操作
 		return PreDeleteFile(Data, FltObjects, CompletionContext);
 
+	else if (Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformationEx)				//删除操作
+		return PreDeleteFile(Data, FltObjects, CompletionContext);
+	
+
 	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED
 		| FLT_FILE_NAME_QUERY_DEFAULT, &NameInfo);
 
@@ -2382,7 +2393,7 @@ BOOLEAN IsProtectedDir(PFLT_CALLBACK_DATA Data)
 
 	NTSTATUS status;
 
-	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED, &FileNameInformation);
+	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED | FLT_FILE_NAME_QUERY_DEFAULT, &FileNameInformation);
 
 	if (NT_SUCCESS(status))
 	{
@@ -2481,7 +2492,7 @@ VOID SetProtectionFolder(PUNICODE_STRING dir)
 	Clean_Fld_List();
 	ParseProtectionDir(dir);
 	IsInSetting = FALSE;
-IOCTL_SHUTDOWN_NOREBOOT:
+//IOCTL_SHUTDOWN_NOREBOOT:
 	WriteDriverParameters();
 	return;
 }
@@ -2510,7 +2521,7 @@ VOID SetOpenProccess(PUNICODE_STRING test)
 	ParseOpenProcess(test);
 	IsInSetting = FALSE;
 	//NtShutdownSystem(ShutdownReboot); 
-IOCTL_SHUTDOWN_NOREBOOT:
+//IOCTL_SHUTDOWN_NOREBOOT:
 	WriteDriverParameters();
 	return;
 }
