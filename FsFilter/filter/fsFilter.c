@@ -2353,9 +2353,13 @@ PreSetInformation(
 	else if (Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformation)				//删除操作
 		return PreDeleteFile(Data, FltObjects, CompletionContext);
 
+#ifndef MINISPY_VISTA
+
 	else if (Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformationEx)				//删除操作
 		return PreDeleteFile(Data, FltObjects, CompletionContext);
-	
+
+#endif // ! MINISPY_VISTA
+
 
 	status = FltGetFileNameInformation(Data, FLT_FILE_NAME_NORMALIZED
 		| FLT_FILE_NAME_QUERY_DEFAULT, &NameInfo);

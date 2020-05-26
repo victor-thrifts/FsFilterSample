@@ -195,10 +195,11 @@ UNICODE_STRING GetProcessUsername()
 	//int index;
 	//SID *sid;
 	LUID luid;
+	PSecurityUserData userInformation = NULL;
 	UNICODE_STRING userName;
 	userName.MaximumLength = 0;
 	userName.Length = 0;
-	PSecurityUserData userInformation = NULL;
+
 	status = ZwOpenProcessTokenEx(NtCurrentProcess(), GENERIC_READ, OBJ_KERNEL_HANDLE, &token);
 	//ZwQueryInformationToken(token, (TOKEN_INFORMATION_CLASS)TokenUser, NULL, 0, &len); //to get required length
 	if (!NT_SUCCESS(status))
@@ -329,10 +330,11 @@ GetSID(__deref_out PUNICODE_STRING sidString, PACCESS_STATE AccessState)
 		ExFreePoolWithTag(tokenInfoBuffer, 'pmt_');
 		return STATUS_FAIL_CHECK;
 	}
-	if (sidString->MaximumLength - sidString->Length >= sizeof(WCHAR)) {
+	//if (sidString->MaximumLength - sidString->Length >= sizeof(WCHAR)) {
 
-		sidString->Buffer[(sidString->Length)] = '\0';
-	}
+	//	sidString->Buffer[(sidString->Length)/sizeof(WCHAR)] = '\0';
+	//}
+
 
 	//KdPrint(("\nGetSID: sidString = %ws\n", sidString->Buffer));
 

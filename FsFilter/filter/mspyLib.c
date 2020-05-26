@@ -311,8 +311,9 @@ Return Value:
         MiniSpyData.StaticBufferInUse = FALSE;
 
     } else {
-
-        SpyFreeBuffer( Record );
+		try {
+			SpyFreeBuffer(Record);
+		} except(EXCEPTION_EXECUTE_HANDLER) {}
     }
 }
 
@@ -578,8 +579,14 @@ Return Value:
 	{
 		RecordList->LogRecord.Data.Reserved[0] = 'D';
 	}
-    else if( Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformation ||
-             Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformationEx )
+    else if( Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformation 
+
+#ifndef MINISPY_VISTA
+
+		|| Data->Iopb->Parameters.SetFileInformation.FileInformationClass == FileDispositionInformationEx
+
+#endif
+		)
     {
 		if (Data->IoStatus.Information & FILE_DOES_NOT_EXIST)
 		{
